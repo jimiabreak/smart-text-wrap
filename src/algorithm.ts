@@ -51,3 +51,37 @@ function applyPrettyToLine(line: string): string {
 export function applyPretty(text: string): string {
   return text.split("\n").map(applyPrettyToLine).join("\n");
 }
+
+function balanceLine(line: string): string {
+  const trimmed = line.trim();
+  if (!trimmed.includes(" ")) return line;
+
+  const midpoint = trimmed.length / 2;
+  let bestIdx = -1;
+
+  // Find the first space at or after the midpoint
+  for (let i = Math.ceil(midpoint); i < trimmed.length; i++) {
+    if (trimmed[i] === " ") {
+      bestIdx = i;
+      break;
+    }
+  }
+
+  // Fall back to the last space before the midpoint
+  if (bestIdx === -1) {
+    for (let i = Math.floor(midpoint); i >= 0; i--) {
+      if (trimmed[i] === " ") {
+        bestIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (bestIdx === -1) return line;
+  return trimmed.slice(0, bestIdx) + "\n" + trimmed.slice(bestIdx + 1);
+}
+
+export function applyBalance(text: string): string {
+  return text.split("\n").map(balanceLine).join("\n");
+}
+

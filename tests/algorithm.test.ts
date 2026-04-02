@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectMode, applyPretty } from "../src/algorithm";
+import { detectMode, applyPretty, applyBalance } from "../src/algorithm";
 
 describe("detectMode", () => {
   it("returns 'balance' for style names containing 'heading'", () => {
@@ -75,3 +75,29 @@ describe("applyPretty", () => {
     expect(applyPretty("Hello world")).toBe("Hello\u00A0world");
   });
 });
+
+describe("applyBalance", () => {
+  it("splits text near the midpoint for two roughly equal lines", () => {
+    const result = applyBalance("The quick brown fox jumps");
+    expect(result).toBe("The quick brown\nfox jumps");
+  });
+
+  it("handles short two-word text", () => {
+    expect(applyBalance("Hello World")).toBe("Hello\nWorld");
+  });
+
+  it("returns single-word text unchanged", () => {
+    expect(applyBalance("Hello")).toBe("Hello");
+  });
+
+  it("picks the split closest to the midpoint", () => {
+    expect(applyBalance("A BB CCCCCCCC")).toBe("A BB\nCCCCCCCC");
+  });
+
+  it("handles multi-paragraph text — balances each paragraph independently", () => {
+    expect(applyBalance("Hello beautiful world\nAnother short line")).toBe(
+      "Hello beautiful\nworld\nAnother short\nline"
+    );
+  });
+});
+
