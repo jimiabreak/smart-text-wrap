@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectMode, applyPretty, applyBalance } from "../src/algorithm";
+import { detectMode, applyPretty, applyBalance, shouldSkip } from "../src/algorithm";
 
 describe("detectMode", () => {
   it("returns 'balance' for style names containing 'heading'", () => {
@@ -98,6 +98,41 @@ describe("applyBalance", () => {
     expect(applyBalance("Hello beautiful world\nAnother short line")).toBe(
       "Hello beautiful\nworld\nAnother short\nline"
     );
+  });
+});
+
+describe("shouldSkip", () => {
+  it("skips empty text", () => {
+    expect(shouldSkip("", "FIXED")).toBe(true);
+  });
+
+  it("skips whitespace-only text", () => {
+    expect(shouldSkip("   ", "FIXED")).toBe(true);
+  });
+
+  it("skips single-word text", () => {
+    expect(shouldSkip("Hello", "FIXED")).toBe(true);
+  });
+
+  it("skips text with WIDTH_AND_HEIGHT auto-resize", () => {
+    expect(shouldSkip("Hello world", "WIDTH_AND_HEIGHT")).toBe(true);
+  });
+
+  it("skips text where last words are already joined with NBSP", () => {
+    expect(shouldSkip("Hello beautiful\u00A0world", "FIXED")).toBe(true);
+  });
+
+  it("does not skip normal multi-word text with fixed width", () => {
+    expect(shouldSkip("Hello beautiful world", "FIXED")).toBe(false);
+    expect(shouldSkip("Hello beautiful world", "NONE")).toBe(false);
+  });
+
+  it("does not skip text with HEIGHT auto-resize (fixed width)", () => {
+    expect(shouldSkip("Hello beautiful world", "HEIGHT")).toBe(false);
+  });
+
+  it("does not skip text with TRUNCATE (fixed width)", () => {
+    expect(shouldSkip("Hello beautiful world", "TRUNCATE")).toBe(false);
   });
 });
 
