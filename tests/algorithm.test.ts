@@ -1,44 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectMode, applyPretty, applyBalance, shouldSkip } from "../src/algorithm";
-
-describe("detectMode", () => {
-  it("returns 'balance' for style names containing 'heading'", () => {
-    expect(detectMode("Heading/H1", "Some text here")).toBe("balance");
-  });
-
-  it("returns 'balance' for style names containing 'title' (case-insensitive)", () => {
-    expect(detectMode("Page Title", "Some text here")).toBe("balance");
-  });
-
-  it("returns 'balance' for style names containing 'display'", () => {
-    expect(detectMode("Display Large", "Some text here")).toBe("balance");
-  });
-
-  it("returns 'balance' for style names containing h1-h6", () => {
-    expect(detectMode("H2", "Some text here")).toBe("balance");
-    expect(detectMode("h3/bold", "Some text here")).toBe("balance");
-  });
-
-  it("returns 'pretty' for body style names", () => {
-    expect(detectMode("Body/Regular", "Some longer text content here")).toBe("pretty");
-  });
-
-  it("returns 'pretty' for style names like 'paragraph' or 'caption'", () => {
-    expect(detectMode("Paragraph", "Some text here that is fairly long")).toBe("pretty");
-  });
-
-  it("falls back to character count when no style name provided", () => {
-    expect(detectMode(null, "Short headline text")).toBe("balance");
-    expect(detectMode(null, "This is a much longer body text paragraph that has more than fifty characters in total")).toBe("pretty");
-  });
-
-  it("uses 50 char threshold for heuristic", () => {
-    const exactly49 = "a".repeat(49);
-    const exactly50 = "a".repeat(50);
-    expect(detectMode(null, exactly49)).toBe("balance");
-    expect(detectMode(null, exactly50)).toBe("pretty");
-  });
-});
+import { applyPretty, applyBalance, shouldSkip, resetText } from "../src/algorithm";
 
 describe("applyPretty", () => {
   it("joins the last two words with a non-breaking space", () => {
@@ -136,3 +97,30 @@ describe("shouldSkip", () => {
   });
 });
 
+describe("resetText", () => {
+  it("replaces non-breaking spaces with regular spaces", () => {
+    expect(resetText("Hello\u00A0world")).toBe("Hello world");
+  });
+
+  it("handles multiple non-breaking spaces", () => {
+    expect(resetText("one\u00A0two\u00A0three")).toBe("one two three");
+  });
+
+  it("removes newlines inserted by balance (restores from original)", () => {
+    expect(resetText("The quick brown\nfox jumps", "The quick brown fox jumps")).toBe(
+      "The quick brown fox jumps"
+    );
+  });
+
+  it("returns original text when provided", () => {
+    expect(resetText("modified\u00A0text", "original text here")).toBe("original text here");
+  });
+
+  it("strips NBSP when no original provided", () => {
+    expect(resetText("Hello\u00A0beautiful\u00A0world")).toBe("Hello beautiful world");
+  });
+
+  it("returns unchanged text if no NBSP and no original", () => {
+    expect(resetText("Hello world")).toBe("Hello world");
+  });
+});

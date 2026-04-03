@@ -1,15 +1,13 @@
-const BALANCE_PATTERN = /\b(head|title|display|h[1-6])\b/i;
-
-export type WrapMode = "balance" | "pretty";
-
-export function detectMode(styleName: string | null, text: string): WrapMode {
-  if (styleName) {
-    return BALANCE_PATTERN.test(styleName) ? "balance" : "pretty";
-  }
-  return text.length < 50 ? "balance" : "pretty";
-}
-
 const NBSP = "\u00A0";
+
+/**
+ * If an original is stored, return it directly.
+ * Otherwise, strip NBSP characters back to regular spaces.
+ */
+export function resetText(text: string, original?: string): string {
+  if (original) return original;
+  return text.replace(/\u00A0/g, " ");
+}
 
 function applyPrettyToLine(line: string): string {
   const trimmed = line.trim();
