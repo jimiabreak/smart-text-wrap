@@ -1,4 +1,5 @@
 import { build, context } from "esbuild";
+import { readFileSync, writeFileSync } from "fs";
 
 const isWatch = process.argv.includes("--watch");
 
@@ -21,6 +22,16 @@ const uiConfig = {
   outfile: "ui.js",
 };
 
+function inlineUiHtml() {
+  const html = readFileSync("src/ui.html", "utf8");
+  const js = readFileSync("ui.js", "utf8");
+  const output = html.replace(
+    "<!-- __UI_SCRIPT__ -->",
+    `<script>${js}</script>`
+  );
+  writeFileSync("ui.html", output);
+}
+
 if (isWatch) {
   const codeCtx = await context(codeConfig);
   const uiCtx = await context(uiConfig);
@@ -30,4 +41,5 @@ if (isWatch) {
 } else {
   await build(codeConfig);
   await build(uiConfig);
+  inlineUiHtml();
 }

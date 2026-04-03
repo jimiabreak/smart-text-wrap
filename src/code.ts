@@ -10,14 +10,14 @@ async function processSelection(mode: WrapMode): Promise<number> {
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
-    figma.notify("Select a frame or text layer first", { error: true });
+    figma.ui.postMessage({ type: "error", message: "Select a frame or text layer first" });
     return 0;
   }
 
   const textNodes = findTextNodes(selection) as TextNode[];
 
   if (textNodes.length === 0) {
-    figma.notify("No text layers found in selection", { error: true });
+    figma.ui.postMessage({ type: "error", message: "No text layers found in selection" });
     return 0;
   }
 
@@ -43,8 +43,8 @@ async function processSelection(mode: WrapMode): Promise<number> {
         node.characters = fixed;
         fixedCount++;
       }
-    } catch {
-      // Skip nodes that fail (locked, removed, etc.)
+    } catch (e) {
+      console.error("Failed to process node:", node.name, e);
     }
   }
 
@@ -55,7 +55,7 @@ async function resetSelection(): Promise<number> {
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
-    figma.notify("Select a frame or text layer first", { error: true });
+    figma.ui.postMessage({ type: "error", message: "Select a frame or text layer first" });
     return 0;
   }
 
@@ -74,8 +74,8 @@ async function resetSelection(): Promise<number> {
         node.setPluginData("originalText", "");
         resetCount++;
       }
-    } catch {
-      // Skip nodes that fail
+    } catch (e) {
+      console.error("Failed to reset node:", node.name, e);
     }
   }
 
@@ -83,21 +83,34 @@ async function resetSelection(): Promise<number> {
 }
 
 figma.ui.onmessage = async (msg: { type: string }) => {
-  if (msg.type === "balance") {
-    const count = await processSelection("balance");
-    figma.notify(`Balanced ${count} text layer${count !== 1 ? "s" : ""}`);
-    figma.ui.postMessage({ type: "done", count });
+  try {
+    if (msg.type === "balance") {
+      const count = await processSelection("balance");
+      if (count > 0) {
+        figma.ui.postMessage({ type: "success", message: `Balanced ${count} text layer${count !== 1 ? "s" : ""}` });
+      }
+    }
+
+    if (msg.type === "pretty") {
+      const count = await processSelection("pretty");
+      if (count > 0) {
+        figma.ui.postMessage({ type: "success", message: `Fixed ${count} text layer${count !== 1 ? "s" : ""}` });
+      }
+    }
+
+    if (msg.type === "reset") {
+      const count = await resetSelection();
+      if (count > 0) {
+        figma.ui.postMessage({ type: "success", message: `Reset ${count} text layer${count !== 1 ? "s" : ""}` });
+      } else {
+        figma.ui.postMessage({ type: "error", message: "No text to reset" });
+      }
+    }
+  } catch (e) {
+    console.error("Plugin error:", e);
+    figma.ui.postMessage({ type: "error", message: "Something went wrong" });
   }
 
-  if (msg.type === "pretty") {
-    const count = await processSelection("pretty");
-    figma.notify(`Fixed ${count} text layer${count !== 1 ? "s" : ""}`);
-    figma.ui.postMessage({ type: "done", count });
-  }
-
-  if (msg.type === "reset") {
-    const count = await resetSelection();
-    figma.notify(`Reset ${count} text layer${count !== 1 ? "s" : ""}`);
-    figma.ui.postMessage({ type: "done", count });
-  }
+  // Always re-enable UI
+  figma.ui.postMessage({ type: "done" });
 };
