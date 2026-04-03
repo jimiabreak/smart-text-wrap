@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <style>
     :root {
@@ -16,6 +16,7 @@
       --accent-pretty: #7c3aed;
       --accent-pretty-bg: #fce7f3;
       --radius: 10px;
+      color-scheme: light dark;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -99,11 +100,17 @@
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s;
       user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .card:hover {
       background: var(--bg-card-hover);
       border-color: var(--border-hover);
+    }
+
+    .card:focus-visible {
+      outline: 2px solid var(--accent-balance);
+      outline-offset: 2px;
     }
 
     .card:active {
@@ -200,12 +207,18 @@
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s, color 0.15s;
       font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .reset-btn:hover {
       background: var(--bg-card);
       border-color: var(--border-hover);
       color: var(--text);
+    }
+
+    .reset-btn:focus-visible {
+      outline: 2px solid var(--accent-balance);
+      outline-offset: 2px;
     }
 
     .reset-btn:active {
@@ -276,13 +289,23 @@
         border-color: #991b1b;
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card:active,
+      .reset-btn:active {
+        transform: none;
+      }
+      .toast {
+        transition: none;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <div class="header-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="6" x2="21" y2="6"/>
           <line x1="3" y1="12" x2="15" y2="12"/>
           <line x1="3" y1="18" x2="18" y2="18"/>
@@ -294,9 +317,9 @@
       </div>
     </div>
 
-    <div id="balanceCard" class="card">
+    <div id="balanceCard" class="card" role="button" tabindex="0" aria-label="Balance: equalizes line lengths for visual symmetry">
       <div class="card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="6" x2="21" y2="6"/>
           <line x1="3" y1="12" x2="21" y2="12"/>
           <line x1="3" y1="18" x2="21" y2="18"/>
@@ -311,9 +334,9 @@
       </div>
     </div>
 
-    <div id="prettyCard" class="card">
+    <div id="prettyCard" class="card" role="button" tabindex="0" aria-label="Pretty: prevents orphaned words on the last line">
       <div class="card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="6" x2="21" y2="6"/>
           <line x1="3" y1="12" x2="21" y2="12"/>
           <line x1="3" y1="18" x2="15" y2="18"/>
@@ -330,8 +353,8 @@
 
     <div class="divider"></div>
 
-    <button id="resetBtn" class="reset-btn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <button id="resetBtn" class="reset-btn" aria-label="Reset text: removes plugin line breaks and restores original text">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 12a9 9 0 1 1 3 6.36"/>
         <polyline points="3 16 3 12 7 12"/>
       </svg>
@@ -341,7 +364,7 @@
     <p class="caption">Removes plugin line breaks and restores original text</p>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" aria-live="polite"></div>
 
   <!-- __UI_SCRIPT__ -->
 </body>

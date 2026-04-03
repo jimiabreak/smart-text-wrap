@@ -21,20 +21,25 @@ function setDisabled(disabled: boolean): void {
   resetBtn.classList.toggle("disabled", disabled);
 }
 
-balanceCard.addEventListener("click", () => {
+function handleAction(type: string): void {
   setDisabled(true);
-  parent.postMessage({ pluginMessage: { type: "balance" } }, "*");
-});
+  parent.postMessage({ pluginMessage: { type } }, "*");
+}
 
-prettyCard.addEventListener("click", () => {
-  setDisabled(true);
-  parent.postMessage({ pluginMessage: { type: "pretty" } }, "*");
-});
+function onKeyActivate(e: KeyboardEvent, type: string): void {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    handleAction(type);
+  }
+}
 
-resetBtn.addEventListener("click", () => {
-  setDisabled(true);
-  parent.postMessage({ pluginMessage: { type: "reset" } }, "*");
-});
+balanceCard.addEventListener("click", () => handleAction("balance"));
+balanceCard.addEventListener("keydown", (e) => onKeyActivate(e, "balance"));
+
+prettyCard.addEventListener("click", () => handleAction("pretty"));
+prettyCard.addEventListener("keydown", (e) => onKeyActivate(e, "pretty"));
+
+resetBtn.addEventListener("click", () => handleAction("reset"));
 
 window.onmessage = (event: MessageEvent) => {
   const msg = event.data.pluginMessage;
