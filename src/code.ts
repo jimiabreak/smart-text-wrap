@@ -1,67 +1,48 @@
-import { detectMode, applyPretty, applyBalance, shouldSkip } from "./algorithm";
+import { applyPretty, applyBalance, shouldSkip, resetText } from "./algorithm";
+import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
 
-figma.showUI(__html__, { width: 240, height: 180 });
+figma.showUI(__html__, { width: 280, height: 380, themeColors: true });
 
-let autoFixEnabled = true;
-let previousSelection: readonly SceneNode[] = [];
+type WrapMode = "balance" | "pretty";
 
-async function fixTextNode(node: TextNode): Promise<boolean> {
-  const text = node.characters;
-  const autoResize = node.textAutoResize;
+async function processSelection(mode: WrapMode): Promise<number> {
+  const selection = figma.currentPage.selection;
 
-  if (shouldSkip(text, autoResize)) return false;
-
-  // Resolve text style name for mode detection
-  let styleName: string | null = null;
-  if (node.textStyleId && typeof node.textStyleId === "string") {
-    const style = await figma.getStyleByIdAsync(node.textStyleId);
-    if (style) styleName = style.name;
+  if (selection.length === 0) {
+    figma.notify("Select a frame or text layer first", { error: true });
+    return 0;
   }
 
-  const mode = detectMode(styleName, text);
+  const textNodes = findTextNodes(selection) as TextNode[];
 
-  await loadFontsForNode(node);
-
-  const fixed = mode === "pretty" ? applyPretty(text) : applyBalance(text);
-
-  if (fixed === text) return false;
-
-  node.characters = fixed;
-  return true;
-}
-
-// Selection listener — fix previous text node when user clicks away
-figma.on("selectionchange", () => {
-  if (!autoFixEnabled) {
-    previousSelection = figma.currentPage.selection;
-    return;
+  if (textNodes.length === 0) {
+    figma.notify("No text layers found in selection", { error: true });
+    return 0;
   }
-
-  const prev = previousSelection;
-  previousSelection = figma.currentPage.selection;
-
-  for (const node of prev) {
-    if (node.type === "TEXT") {
-      fixTextNode(node).catch(() => {
-        // Silently skip nodes that can't be modified (e.g., removed from tree)
-      });
-    }
-  }
-});
-
-// Batch fix — process all text nodes on the current page
-async function fixCurrentPage(): Promise<number> {
-  const textNodes = figma.currentPage.findAll(
-    (node) => node.type === "TEXT"
-  ) as TextNode[];
 
   let fixedCount = 0;
 
   for (const node of textNodes) {
     try {
-      const wasFixed = await fixTextNode(node);
-      if (wasFixed) fixedCount++;
+      const text = node.characters;
+      const autoResize = node.textAutoResize;
+
+      if (shouldSkip(text, autoResize)) continue;
+
+      // Store original text before first modification
+      if (!node.getPluginData("originalText")) {
+        node.setPluginData("originalText", text);
+      }
+
+      await loadFontsForNode(node);
+
+      const fixed = mode === "pretty" ? applyPretty(text) : applyBalance(text);
+
+      if (fixed !== text) {
+        node.characters = fixed;
+        fixedCount++;
+      }
     } catch {
       // Skip nodes that fail (locked, removed, etc.)
     }
@@ -70,15 +51,53 @@ async function fixCurrentPage(): Promise<number> {
   return fixedCount;
 }
 
-// Message handler — receive UI actions
-figma.ui.onmessage = async (msg: { type: string; enabled?: boolean }) => {
-  if (msg.type === "fix-page") {
-    const count = await fixCurrentPage();
-    figma.notify(`Fixed ${count} text layer${count !== 1 ? "s" : ""}`);
-    figma.ui.postMessage({ type: "fix-page-done", count });
+async function resetSelection(): Promise<number> {
+  const selection = figma.currentPage.selection;
+
+  if (selection.length === 0) {
+    figma.notify("Select a frame or text layer first", { error: true });
+    return 0;
   }
 
-  if (msg.type === "toggle-auto") {
-    autoFixEnabled = msg.enabled ?? true;
+  const textNodes = findTextNodes(selection) as TextNode[];
+  let resetCount = 0;
+
+  for (const node of textNodes) {
+    try {
+      const original = node.getPluginData("originalText");
+      const text = node.characters;
+      const restored = resetText(text, original || undefined);
+
+      if (restored !== text) {
+        await loadFontsForNode(node);
+        node.characters = restored;
+        node.setPluginData("originalText", "");
+        resetCount++;
+      }
+    } catch {
+      // Skip nodes that fail
+    }
+  }
+
+  return resetCount;
+}
+
+figma.ui.onmessage = async (msg: { type: string }) => {
+  if (msg.type === "balance") {
+    const count = await processSelection("balance");
+    figma.notify(`Balanced ${count} text layer${count !== 1 ? "s" : ""}`);
+    figma.ui.postMessage({ type: "done", count });
+  }
+
+  if (msg.type === "pretty") {
+    const count = await processSelection("pretty");
+    figma.notify(`Fixed ${count} text layer${count !== 1 ? "s" : ""}`);
+    figma.ui.postMessage({ type: "done", count });
+  }
+
+  if (msg.type === "reset") {
+    const count = await resetSelection();
+    figma.notify(`Reset ${count} text layer${count !== 1 ? "s" : ""}`);
+    figma.ui.postMessage({ type: "done", count });
   }
 };
