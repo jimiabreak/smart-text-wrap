@@ -1,31 +1,33 @@
-const fixPageBtn = document.getElementById("fixPageBtn") as HTMLButtonElement;
-const autoToggle = document.getElementById("autoToggle") as HTMLInputElement;
-const statusEl = document.getElementById("status") as HTMLParagraphElement;
+const balanceCard = document.getElementById("balanceCard") as HTMLDivElement;
+const prettyCard = document.getElementById("prettyCard") as HTMLDivElement;
+const resetBtn = document.getElementById("resetBtn") as HTMLButtonElement;
 
-fixPageBtn.addEventListener("click", () => {
-  fixPageBtn.disabled = true;
-  fixPageBtn.textContent = "Fixing...";
-  parent.postMessage({ pluginMessage: { type: "fix-page" } }, "*");
+function setDisabled(disabled: boolean): void {
+  balanceCard.classList.toggle("disabled", disabled);
+  prettyCard.classList.toggle("disabled", disabled);
+  resetBtn.classList.toggle("disabled", disabled);
+}
+
+balanceCard.addEventListener("click", () => {
+  setDisabled(true);
+  parent.postMessage({ pluginMessage: { type: "balance" } }, "*");
 });
 
-autoToggle.addEventListener("change", () => {
-  parent.postMessage(
-    { pluginMessage: { type: "toggle-auto", enabled: autoToggle.checked } },
-    "*"
-  );
+prettyCard.addEventListener("click", () => {
+  setDisabled(true);
+  parent.postMessage({ pluginMessage: { type: "pretty" } }, "*");
+});
+
+resetBtn.addEventListener("click", () => {
+  setDisabled(true);
+  parent.postMessage({ pluginMessage: { type: "reset" } }, "*");
 });
 
 window.onmessage = (event: MessageEvent) => {
   const msg = event.data.pluginMessage;
   if (!msg) return;
 
-  if (msg.type === "fix-page-done") {
-    statusEl.textContent = `Fixed ${msg.count} text layer${msg.count !== 1 ? "s" : ""}`;
-    fixPageBtn.disabled = false;
-    fixPageBtn.textContent = "Fix This Page";
-  }
-
-  if (msg.type === "auto-state") {
-    autoToggle.checked = msg.enabled;
+  if (msg.type === "done") {
+    setDisabled(false);
   }
 };
