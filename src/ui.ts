@@ -16,12 +16,19 @@ function showToast(message: string, variant: "success" | "error"): void {
 }
 
 function setDisabled(disabled: boolean): void {
+  isDisabled = disabled;
   balanceCard.classList.toggle("disabled", disabled);
   prettyCard.classList.toggle("disabled", disabled);
   resetBtn.classList.toggle("disabled", disabled);
+  balanceCard.setAttribute("tabindex", disabled ? "-1" : "0");
+  prettyCard.setAttribute("tabindex", disabled ? "-1" : "0");
+  resetBtn.disabled = disabled;
 }
 
+let isDisabled = false;
+
 function handleAction(type: string): void {
+  if (isDisabled) return;
   setDisabled(true);
   parent.postMessage({ pluginMessage: { type } }, "*");
 }

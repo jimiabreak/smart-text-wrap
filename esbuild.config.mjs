@@ -16,21 +16,31 @@ const codeConfig = {
   outfile: "code.js",
 };
 
+const inlinePlugin = {
+  name: "inline-ui-html",
+  setup(build) {
+    build.onEnd(() => {
+      try {
+        const html = readFileSync("src/ui.html", "utf8");
+        const js = readFileSync("ui.js", "utf8");
+        const output = html.replace(
+          "<!-- __UI_SCRIPT__ -->",
+          `<script>${js}</script>`
+        );
+        writeFileSync("ui.html", output);
+      } catch (e) {
+        console.error("Failed to inline UI:", e.message);
+      }
+    });
+  },
+};
+
 const uiConfig = {
   ...sharedConfig,
   entryPoints: ["src/ui.ts"],
   outfile: "ui.js",
+  plugins: [inlinePlugin],
 };
-
-function inlineUiHtml() {
-  const html = readFileSync("src/ui.html", "utf8");
-  const js = readFileSync("ui.js", "utf8");
-  const output = html.replace(
-    "<!-- __UI_SCRIPT__ -->",
-    `<script>${js}</script>`
-  );
-  writeFileSync("ui.html", output);
-}
 
 if (isWatch) {
   const codeCtx = await context(codeConfig);
@@ -41,5 +51,4 @@ if (isWatch) {
 } else {
   await build(codeConfig);
   await build(uiConfig);
-  inlineUiHtml();
 }

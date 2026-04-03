@@ -25,21 +25,28 @@ async function processSelection(mode: WrapMode): Promise<number> {
 
   for (const node of textNodes) {
     try {
-      const text = node.characters;
-      const autoResize = node.textAutoResize;
-
-      if (shouldSkip(text, autoResize)) continue;
-
-      // Store original text before first modification
-      if (!node.getPluginData("originalText")) {
-        node.setPluginData("originalText", text);
-      }
-
       await loadFontsForNode(node);
 
-      const fixed = mode === "pretty" ? applyPretty(text) : applyBalance(text);
+      // Always work from original text to prevent double-application
+      const stored = node.getPluginData("originalText");
+      const currentText = node.characters;
+      const sourceText = stored || currentText;
 
-      if (fixed !== text) {
+      if (shouldSkip(sourceText, node.textAutoResize)) continue;
+
+      // Store original before first modification
+      if (!stored) {
+        node.setPluginData("originalText", currentText);
+      }
+
+      // Restore to original first if previously modified
+      if (stored && stored !== currentText) {
+        node.characters = stored;
+      }
+
+      const fixed = mode === "pretty" ? applyPretty(sourceText) : applyBalance(sourceText);
+
+      if (fixed !== sourceText) {
         node.characters = fixed;
         fixedCount++;
       }
@@ -88,6 +95,8 @@ figma.ui.onmessage = async (msg: { type: string }) => {
       const count = await processSelection("balance");
       if (count > 0) {
         figma.ui.postMessage({ type: "success", message: `Balanced ${count} text layer${count !== 1 ? "s" : ""}` });
+      } else {
+        figma.ui.postMessage({ type: "error", message: "No text needed changes" });
       }
     }
 
@@ -95,6 +104,8 @@ figma.ui.onmessage = async (msg: { type: string }) => {
       const count = await processSelection("pretty");
       if (count > 0) {
         figma.ui.postMessage({ type: "success", message: `Fixed ${count} text layer${count !== 1 ? "s" : ""}` });
+      } else {
+        figma.ui.postMessage({ type: "error", message: "No text needed changes" });
       }
     }
 

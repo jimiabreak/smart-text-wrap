@@ -79,8 +79,8 @@ describe("shouldSkip", () => {
     expect(shouldSkip("Hello world", "WIDTH_AND_HEIGHT")).toBe(true);
   });
 
-  it("skips text where last words are already joined with NBSP", () => {
-    expect(shouldSkip("Hello beautiful\u00A0world", "FIXED")).toBe(true);
+  it("does not skip text already processed with NBSP (re-application allowed)", () => {
+    expect(shouldSkip("Hello beautiful\u00A0world", "FIXED")).toBe(false);
   });
 
   it("does not skip normal multi-word text with fixed width", () => {

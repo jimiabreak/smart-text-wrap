@@ -95,11 +95,6 @@ export function shouldSkip(text: string, textAutoResize: string): boolean {
   // Auto-width container — no orphan possible
   if (textAutoResize === "WIDTH_AND_HEIGHT") return true;
 
-  // Already fixed — last space before final word is NBSP
-  const lastSpaceIdx = trimmed.lastIndexOf(" ");
-  const lastNbspIdx = trimmed.lastIndexOf(NBSP);
-  if (lastNbspIdx > lastSpaceIdx) return true;
-
   return false;
 }
 
