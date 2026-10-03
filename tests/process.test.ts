@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { wrapNodes, resetNodes, setText, type WrapDeps } from "../src/process";
+import { wrapNodes, resetNodes, setText, type TextNodeLike, type WrapDeps } from "../src/process";
 
 const NBSP = "\u00A0";
 
@@ -47,7 +47,34 @@ function boldStyles(): string[] {
   return "Hello beautiful world".split("").map((_, i) => (i >= 6 && i <= 14 ? "bold" : "regular"));
 }
 
-const deps: WrapDeps = { loadFonts: async () => {} };
+/** Greedy word wrap at `width` characters per line, like a fixed-width text box. NBSP-joined words stay together. */
+function wrapCount(text: string, width: number): number {
+  let lines = 0;
+  for (const paragraph of text.split("\n")) {
+    lines++;
+    let lineLength = 0;
+    for (const word of paragraph.split(" ")) {
+      const next = lineLength === 0 ? word.length : lineLength + 1 + word.length;
+      if (lineLength > 0 && next > width) {
+        lines++;
+        lineLength = word.length;
+      } else {
+        lineLength = next;
+      }
+    }
+  }
+  return lines;
+}
+
+/** Test deps: fonts always load, and every layer is a text box `width` characters wide. */
+function depsAt(width: number): WrapDeps {
+  return {
+    loadFonts: async () => {},
+    countLines: (node: TextNodeLike) => wrapCount(node.characters, width),
+  };
+}
+
+const deps = depsAt(30);
 
 describe("wrapNodes", () => {
   it("applies Pretty and stores the original text", async () => {
@@ -58,24 +85,11 @@ describe("wrapNodes", () => {
     expect(node.getPluginData("originalText")).toBe("The quick brown fox jumps over the lazy dog");
   });
 
-  it("applies Balance", async () => {
-    const node = makeNode("The quick brown fox jumps");
-    await wrapNodes([node], "balance", deps);
-    expect(node.characters).toBe("The quick brown\nfox jumps");
-  });
-
   it("switches from Balance to Pretty starting from the original text", async () => {
     const node = makeNode("The quick brown fox jumps over the lazy dog");
     await wrapNodes([node], "balance", deps);
     await wrapNodes([node], "pretty", deps);
     expect(node.characters).toBe(`The quick brown fox jumps over the lazy${NBSP}dog`);
-  });
-
-  it("does not double-apply when the same mode runs twice", async () => {
-    const node = makeNode("The quick brown fox jumps");
-    await wrapNodes([node], "balance", deps);
-    await wrapNodes([node], "balance", deps);
-    expect(node.characters).toBe("The quick brown\nfox jumps");
   });
 
   it("skips single-word and auto-width text", async () => {
@@ -89,7 +103,7 @@ describe("wrapNodes", () => {
 
   it("counts a layer whose fonts fail to load as failed and leaves it unchanged", async () => {
     const node = makeNode("Hello beautiful world");
-    const failing: WrapDeps = { loadFonts: async () => Promise.reject(new Error("font not available")) };
+    const failing: WrapDeps = { ...deps, loadFonts: async () => Promise.reject(new Error("font not available")) };
     const result = await wrapNodes([node], "pretty", failing);
     expect(result.failed).toBe(1);
     expect(result.changed).toBe(0);
@@ -130,8 +144,8 @@ describe("wrapNodes", () => {
 
   it("keeps range styles when switching from Balance to Pretty", async () => {
     const node = makeNode("Hello beautiful world", { styles: boldStyles() });
-    await wrapNodes([node], "balance", deps);
-    await wrapNodes([node], "pretty", deps);
+    await wrapNodes([node], "balance", depsAt(16));
+    await wrapNodes([node], "pretty", depsAt(16));
     expect(node.styles).toEqual(boldStyles());
   });
 
@@ -139,6 +153,50 @@ describe("wrapNodes", () => {
     const node = makeNode("Ship it today 🚀 friends");
     await wrapNodes([node], "pretty", deps);
     expect(node.characters).toBe(`Ship it today 🚀${NBSP}friends`);
+  });
+});
+
+describe("wrapNodes — Balance", () => {
+  it("balances a two-line heading into two even lines", async () => {
+    const node = makeNode("The quick brown fox jumps");
+    await wrapNodes([node], "balance", depsAt(20));
+    expect(node.characters).toBe("The quick brown\nfox jumps");
+  });
+
+  it("does not double-apply when Balance runs twice", async () => {
+    const node = makeNode("The quick brown fox jumps");
+    await wrapNodes([node], "balance", depsAt(20));
+    const second = await wrapNodes([node], "balance", depsAt(20));
+    expect(node.characters).toBe("The quick brown\nfox jumps");
+    expect(second.changed).toBe(0);
+  });
+
+  it("leaves text that fits on one line alone", async () => {
+    const node = makeNode("Our pricing");
+    const result = await wrapNodes([node], "balance", depsAt(40));
+    expect(node.characters).toBe("Our pricing");
+    expect(result.changed).toBe(0);
+  });
+
+  it("balances a three-line heading into three lines", async () => {
+    const node = makeNode("Smart Text Wrap prevents orphans and balances text in Figma");
+    await wrapNodes([node], "balance", depsAt(25));
+    expect(node.characters.split("\n")).toHaveLength(3);
+  });
+
+  it("keeps the original when balancing would add a line", async () => {
+    // At 10 chars wide this wraps to 2 lines, but the midpoint split gives an 11-char first line that wraps again
+    const node = makeNode("aaaaaaaaa b cccccccc");
+    const result = await wrapNodes([node], "balance", depsAt(10));
+    expect(node.characters).toBe("aaaaaaaaa b cccccccc");
+    expect(result.changed).toBe(0);
+    expect(node.getPluginData("originalText")).toBe("");
+  });
+
+  it("leaves multi-paragraph text alone", async () => {
+    const node = makeNode("First paragraph is here\nSecond paragraph is here");
+    await wrapNodes([node], "balance", depsAt(10));
+    expect(node.characters).toBe("First paragraph is here\nSecond paragraph is here");
   });
 });
 

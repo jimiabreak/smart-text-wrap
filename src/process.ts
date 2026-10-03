@@ -1,4 +1,4 @@
-import { applyPretty, applyBalance, shouldSkip } from "./algorithm";
+import { applyPretty, balanceToLines, shouldSkip } from "./algorithm";
 
 export type WrapMode = "balance" | "pretty";
 
@@ -16,6 +16,8 @@ export interface TextNodeLike {
 
 export interface WrapDeps {
   loadFonts(node: TextNodeLike): Promise<void>;
+  /** Rendered line count of the node's current text at its current width. */
+  countLines(node: TextNodeLike): number;
 }
 
 export interface ProcessResult {
@@ -72,6 +74,17 @@ export function setText(node: TextNodeLike, target: string): void {
   }
 }
 
+/** Balance against the layer's real line count, and keep the result only if it doesn't add lines. */
+function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
+  if (source.includes("\n")) return source;
+  setText(node, source); // measure the unwrapped text
+  const lines = deps.countLines(node);
+  const target = balanceToLines(source, lines);
+  if (target === source) return source;
+  setText(node, target);
+  return deps.countLines(node) <= lines ? target : source;
+}
+
 export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: WrapDeps): Promise<ProcessResult> {
   const result = emptyResult();
 
@@ -87,7 +100,7 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
       await deps.loadFonts(node);
 
       const before = node.characters;
-      const target = mode === "pretty" ? applyPretty(source) : applyBalance(source);
+      const target = mode === "pretty" ? applyPretty(source) : balance(node, source, deps);
       setText(node, target);
       if (node.characters !== before) result.changed++;
 
@@ -106,7 +119,7 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
   return result;
 }
 
-export async function resetNodes(nodes: TextNodeLike[], deps: WrapDeps): Promise<ProcessResult> {
+export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "loadFonts">): Promise<ProcessResult> {
   const result = emptyResult();
 
   for (const node of nodes) {
