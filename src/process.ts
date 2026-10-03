@@ -56,6 +56,35 @@ function clearWrapData(node: TextNodeLike): void {
   node.setPluginData(APPLIED_KEY, "");
 }
 
+function snapshot(node: TextNodeLike) {
+  return {
+    text: node.characters,
+    original: node.getPluginData(ORIGINAL_KEY),
+    applied: node.getPluginData(APPLIED_KEY),
+    resize: node.textAutoResize,
+    missingFont: node.hasMissingFont,
+  };
+}
+
+function stillMatches(node: TextNodeLike, before: ReturnType<typeof snapshot>): boolean {
+  const now = snapshot(node);
+  return now.text === before.text && now.original === before.original && now.applied === before.applied
+    && now.resize === before.resize && now.missingFont === before.missingFont;
+}
+
+/** Restore text and both metadata entries even if an individual rollback fails. */
+function restore(node: TextNodeLike, before: ReturnType<typeof snapshot>): void {
+  try {
+    if (node.characters !== before.text) setText(node, before.text);
+  } finally {
+    try {
+      if (node.getPluginData(ORIGINAL_KEY) !== before.original) node.setPluginData(ORIGINAL_KEY, before.original);
+    } finally {
+      if (node.getPluginData(APPLIED_KEY) !== before.applied) node.setPluginData(APPLIED_KEY, before.applied);
+    }
+  }
+}
+
 /**
  * Change the node's text to `target` one character at a time, so bold, links
  * and other range styles survive. Assigning `characters` would reset them.
@@ -107,19 +136,28 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
         result.skippedMissingFont++;
         continue;
       }
+      const before = snapshot(node);
       await deps.loadFonts(node);
-
-      const before = node.characters;
-      const target = mode === "pretty" ? applyPretty(source) : balance(node, source, deps);
-      setText(node, target);
-      if (node.characters !== before) result.changed++;
-
-      if (target === source) {
-        clearWrapData(node);
-      } else {
-        node.setPluginData(ORIGINAL_KEY, source);
-        node.setPluginData(APPLIED_KEY, target);
+      // A designer or another action may edit the layer while fonts load.
+      if (!stillMatches(node, before)) {
+        result.skippedEdited++;
+        continue;
       }
+      try {
+        const target = mode === "pretty" ? applyPretty(source) : balance(node, source, deps);
+        // Store both recovery entries before committing the final text.
+        if (target === source) {
+          clearWrapData(node);
+        } else {
+          node.setPluginData(ORIGINAL_KEY, source);
+          node.setPluginData(APPLIED_KEY, target);
+        }
+        setText(node, target);
+      } catch (e) {
+        restore(node, before);
+        throw e;
+      }
+      if (node.characters !== before.text) result.changed++;
     } catch (e) {
       console.error("Failed to process node:", node.name, e);
       result.failed++;
@@ -149,9 +187,19 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
         result.skippedMissingFont++;
         continue;
       }
+      const before = snapshot(node);
       await deps.loadFonts(node);
-      setText(node, original);
-      clearWrapData(node);
+      if (!stillMatches(node, before)) {
+        result.skippedEdited++;
+        continue;
+      }
+      try {
+        clearWrapData(node);
+        setText(node, original);
+      } catch (e) {
+        restore(node, before);
+        throw e;
+      }
       result.changed++;
     } catch (e) {
       console.error("Failed to reset node:", node.name, e);

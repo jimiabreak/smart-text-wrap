@@ -33,7 +33,7 @@ export function describeResult(action: Action, result: ProcessResult): { type: T
   if (result.failed > 0) {
     problems.push(`Couldn't update ${layers(result.failed)}. Try again, or reopen the plugin.`);
   }
-  const notes = result.skippedEdited > 0 ? [`Kept ${layers(result.skippedEdited)} you edited after wrapping.`] : [];
+  const notes = result.skippedEdited > 0 ? [`Kept ${layers(result.skippedEdited)} you edited. Run the action again if needed.`] : [];
 
   const parts = result.changed > 0 ? [`${DONE[action](result.changed)}.`, ...problems, ...notes] : [...problems, ...notes];
 

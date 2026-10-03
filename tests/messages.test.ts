@@ -45,11 +45,11 @@ describe("describeResult", () => {
   it("tells the designer their edits were kept on reset", () => {
     expect(describeResult("reset", result({ skippedEdited: 1 }))).toEqual({
       type: "info",
-      message: "Kept 1 text layer you edited after wrapping.",
+      message: "Kept 1 text layer you edited. Run the action again if needed.",
     });
     expect(describeResult("reset", result({ changed: 2, skippedEdited: 1 }))).toEqual({
       type: "success",
-      message: "Reset 2 text layers. Kept 1 text layer you edited after wrapping.",
+      message: "Reset 2 text layers. Kept 1 text layer you edited. Run the action again if needed.",
     });
   });
 });

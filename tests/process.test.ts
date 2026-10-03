@@ -77,6 +77,98 @@ function depsAt(width: number): WrapDeps {
 
 const deps = depsAt(30);
 
+describe("edits during font loading", () => {
+  for (const mode of ["pretty", "balance"] as const) {
+    it(`keeps same-length edits made during ${mode}`, async () => {
+      const node = makeNode("Hello beautiful world");
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => { release = resolve; });
+      const action = wrapNodes([node], mode, { ...deps, loadFonts: () => pending });
+      node.characters = "Hello beautiful earth";
+      release();
+      const result = await action;
+      expect(node.characters).toBe("Hello beautiful earth");
+      expect(result).toMatchObject({ changed: 0, failed: 0, skippedEdited: 1 });
+      expect(node.getPluginData("originalText")).toBe("");
+    });
+  }
+
+  it("keeps edits made while Reset loads fonts", async () => {
+    const node = makeNode("Hello beautiful world");
+    await wrapNodes([node], "pretty", deps);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const action = resetNodes([node], { loadFonts: () => pending });
+    node.characters = "Hello beautiful earth";
+    release();
+    expect(await action).toMatchObject({ changed: 0, failed: 0, skippedEdited: 1 });
+    expect(node.characters).toBe("Hello beautiful earth");
+    await resetNodes([node], deps);
+    expect(node.characters).toBe("Hello beautiful earth");
+  });
+
+  it("does not overwrite recovery data changed by another action", async () => {
+    const node = makeNode("Hello beautiful world");
+    const result = await wrapNodes([node], "pretty", { ...deps, loadFonts: async () => {
+      node.setPluginData("originalText", "New recovery text");
+      node.setPluginData("appliedText", node.characters);
+    } });
+    expect(result.skippedEdited).toBe(1);
+    expect(node.getPluginData("originalText")).toBe("New recovery text");
+    expect(node.characters).toBe("Hello beautiful world");
+  });
+});
+
+describe("recovery data failures", () => {
+  it("leaves oversized text unchanged when its original cannot be stored", async () => {
+    const source = "a".repeat(110_000) + " last words";
+    const node = makeNode(source);
+    const write = node.setPluginData;
+    node.setPluginData = (key, value) => {
+      if (new TextEncoder().encode(value).length > 100_000) throw new Error("Plugin data exceeds 100 kB");
+      write(key, value);
+    };
+    expect(await wrapNodes([node], "pretty", deps)).toMatchObject({ changed: 0, failed: 1 });
+    expect(node.characters).toBe(source);
+    expect(node.getPluginData("originalText")).toBe("");
+  });
+
+  it("restores a previous wrap when writing the second metadata entry fails", async () => {
+    const node = makeNode("The quick brown fox jumps over the lazy dog");
+    await wrapNodes([node], "pretty", deps);
+    const before = node.characters;
+    const original = node.getPluginData("originalText");
+    const write = node.setPluginData;
+    node.setPluginData = (key, value) => {
+      if (key === "appliedText" && value.includes("\n")) throw new Error("Storage write failed");
+      write(key, value);
+    };
+    expect(await wrapNodes([node], "balance", deps)).toMatchObject({ changed: 0, failed: 1 });
+    expect(node.characters).toBe(before);
+    expect(node.getPluginData("originalText")).toBe(original);
+    expect(node.getPluginData("appliedText")).toBe(before);
+    expect((await resetNodes([node], deps)).changed).toBe(1);
+    expect(node.characters).toBe(original);
+  });
+
+  it("keeps Reset available when clearing the second entry fails", async () => {
+    const node = makeNode("Hello beautiful world");
+    await wrapNodes([node], "pretty", deps);
+    const before = node.characters;
+    const write = node.setPluginData;
+    node.setPluginData = (key, value) => {
+      if (key === "appliedText" && value === "") throw new Error("Storage write failed");
+      write(key, value);
+    };
+    expect(await resetNodes([node], deps)).toMatchObject({ changed: 0, failed: 1 });
+    expect(node.characters).toBe(before);
+    expect(node.getPluginData("originalText")).toBe("Hello beautiful world");
+    expect(node.getPluginData("appliedText")).toBe(before);
+    node.setPluginData = write;
+    expect((await resetNodes([node], deps)).changed).toBe(1);
+  });
+});
+
 describe("wrapNodes", () => {
   it("applies Pretty and stores the original text", async () => {
     const node = makeNode("The quick brown fox jumps over the lazy dog");
