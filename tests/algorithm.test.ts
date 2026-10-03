@@ -40,6 +40,12 @@ describe("applyPretty", () => {
     expect(applyPretty("Hello world\u00A0")).toBe("Hello\u00A0world\u00A0");
   });
 
+  it("fixes the end of each Shift+Return line too", () => {
+    expect(applyPretty("Our new product launch\u2028is here for everyone")).toBe(
+      "Our new product\u00A0launch\u2028is here for\u00A0everyone"
+    );
+  });
+
   it("keeps leading and trailing whitespace", () => {
     expect(applyPretty("  indented line here  ")).toBe("  indented line\u00A0here  ");
   });

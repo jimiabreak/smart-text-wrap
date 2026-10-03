@@ -1,6 +1,6 @@
 import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
-import { countLines, textHeight } from "./measure";
+import { measureText } from "./measure";
 import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps } from "./process";
 import {
   describeResult,
@@ -8,16 +8,13 @@ import {
   NO_SELECTION,
   NO_TEXT_LAYERS,
   UNEXPECTED_ERROR,
+  WINDOW_SIZE,
   type Action,
+  type PluginRequest,
   type UiMessage,
 } from "./messages";
 
-/** Window size. The UI asks for more height only while a long toast would cover the panel. */
-const WIDTH = 280;
-const HEIGHT = 460;
-const MAX_HEIGHT = 800;
-
-figma.showUI(__html__, { width: WIDTH, height: HEIGHT, themeColors: true });
+figma.showUI(__html__, { width: WINDOW_SIZE.width, height: WINDOW_SIZE.height, themeColors: true });
 
 function post(message: UiMessage): void {
   figma.ui.postMessage(message);
@@ -25,8 +22,7 @@ function post(message: UiMessage): void {
 
 const deps: WrapDeps = {
   loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
-  countLines: (node: TextNodeLike, text: string) => countLines(node as TextNode, text),
-  textHeight: (node: TextNodeLike, text: string) => textHeight(node as TextNode, text),
+  measure: (node: TextNodeLike, text: string) => measureText(node as TextNode, text),
 };
 
 async function run(action: Action): Promise<void> {
@@ -48,9 +44,12 @@ async function run(action: Action): Promise<void> {
   post(describeResult(action, result));
 }
 
-figma.ui.onmessage = async (msg: { type: string; height?: number }) => {
+// Messages come from the panel's iframe, so check them at runtime too
+figma.ui.onmessage = async (msg: PluginRequest) => {
   if (msg.type === "resize") {
-    if (typeof msg.height === "number") figma.ui.resize(WIDTH, Math.min(Math.max(Math.round(msg.height), HEIGHT), MAX_HEIGHT));
+    if (Number.isFinite(msg.height)) {
+      figma.ui.resize(WINDOW_SIZE.width, Math.min(Math.max(Math.round(msg.height), WINDOW_SIZE.height), WINDOW_SIZE.maxHeight));
+    }
     return;
   }
 

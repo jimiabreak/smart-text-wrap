@@ -49,7 +49,11 @@ function applyPrettyToLine(line: string): string {
 }
 
 export function applyPretty(text: string): string {
-  return text.split("\n").map(applyPrettyToLine).join("\n");
+  // Each paragraph and each Shift+Return line has its own last line, where an orphan can appear
+  return text
+    .split(/(\n|\u2028)/)
+    .map((part) => (part === "\n" || part === "\u2028" ? part : applyPrettyToLine(part)))
+    .join("");
 }
 
 /** Chromium stops balancing text that runs past this many lines; longer text is left alone. */

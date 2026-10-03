@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { wrapNodes, resetNodes, setText, type TextNodeLike, type WrapDeps } from "../src/process";
+import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps } from "../src/process";
+import { setText } from "../src/text";
 import { FontsChangedError } from "../src/errors";
 
 const NBSP = "\u00A0";
@@ -21,6 +22,8 @@ function makeNode(text: string, opts: { textAutoResize?: string; hasMissingFont?
     /** Number of character edits the plugin made through insertCharacters. */
     writes: 0,
     get characters() {
+      // Like Figma, a deleted layer throws on any property read except `removed`
+      if (this.removed) throw new Error("The node with id 1:1 does not exist");
       return chars;
     },
     set characters(value: string) {
@@ -75,8 +78,7 @@ function wrapCount(text: string, width: number): number {
 function depsAt(width: number): WrapDeps {
   return {
     loadFonts: async () => {},
-    countLines: (_node: TextNodeLike, text: string) => wrapCount(text, width),
-    textHeight: (_node: TextNodeLike, text: string) => wrapCount(text, width),
+    measure: (_node: TextNodeLike, text: string) => ({ lines: wrapCount(text, width), height: wrapCount(text, width) }),
   };
 }
 
@@ -93,7 +95,7 @@ describe("edits during font loading", () => {
       release();
       const result = await action;
       expect(node.characters).toBe("Hello beautiful earth");
-      expect(result).toMatchObject({ changed: 0, failed: 0, skippedEdited: 1 });
+      expect(result).toMatchObject({ changed: 0, failed: 0, skippedEdited: 0, interrupted: 1 });
       expect(node.getPluginData("originalText")).toBe("");
     });
   }
@@ -106,7 +108,7 @@ describe("edits during font loading", () => {
     const action = resetNodes([node], { loadFonts: () => pending });
     node.characters = "Hello beautiful earth";
     release();
-    expect(await action).toMatchObject({ changed: 0, failed: 0, skippedEdited: 1 });
+    expect(await action).toMatchObject({ changed: 0, failed: 0, skippedEdited: 0, interrupted: 1 });
     expect(node.characters).toBe("Hello beautiful earth");
     await resetNodes([node], deps);
     expect(node.characters).toBe("Hello beautiful earth");
@@ -118,7 +120,7 @@ describe("edits during font loading", () => {
       node.setPluginData("originalText", "New recovery text");
       node.setPluginData("appliedText", node.characters);
     } });
-    expect(result.skippedEdited).toBe(1);
+    expect(result.interrupted).toBe(1);
     expect(node.getPluginData("originalText")).toBe("New recovery text");
     expect(node.characters).toBe("Hello beautiful world");
   });
@@ -225,11 +227,11 @@ describe("wrapNodes", () => {
     expect(node.getPluginData("originalText")).toBe("A completely rewritten paragraph by the designer");
   });
 
-  it("skips a layer whose fonts change while loading, as an edit rather than a failure", async () => {
+  it("skips a layer whose fonts change while loading, as interrupted rather than failed", async () => {
     const node = makeNode("Hello beautiful world");
     const changing: WrapDeps = { ...deps, loadFonts: async () => Promise.reject(new FontsChangedError()) };
     const result = await wrapNodes([node], "pretty", changing);
-    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 1, skippedMissingFont: 0 });
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1 });
     expect(node.characters).toBe("Hello beautiful world");
   });
 
@@ -237,12 +239,27 @@ describe("wrapNodes", () => {
     const node = makeNode("Hello beautiful world");
     const deleting: WrapDeps = {
       ...deps,
+      // The real loader reads the layer after loading, which throws once it is deleted
       loadFonts: async () => {
         node.removed = true;
+        void node.characters;
       },
     };
     const result = await wrapNodes([node], "pretty", deleting);
-    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0 });
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 });
+  });
+
+  it("quietly skips a layer deleted before its turn", async () => {
+    const first = makeNode("Hello beautiful world");
+    const second = makeNode("Another lovely sentence");
+    const deleting: WrapDeps = {
+      ...deps,
+      loadFonts: async (node) => {
+        if (node === first) second.removed = true;
+      },
+    };
+    const result = await wrapNodes([first, second], "pretty", deleting);
+    expect(result).toEqual({ changed: 1, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 });
   });
 
   it("skips layers with missing fonts without touching them", async () => {
@@ -312,10 +329,10 @@ describe("wrapNodes — Balance", () => {
   });
 
   it("rejects a taller result even when line counts of broken text are unreliable", async () => {
-    // Figma's one-line pass can't count lines once "\n" is present; only textHeight may judge the result
+    // Figma's one-line pass can't count lines once "\n" is present; only the height may judge the result
     const deps: WrapDeps = {
       ...depsAt(10),
-      countLines: (_node: TextNodeLike, text: string) => (text.includes("\n") ? 1 : wrapCount(text, 10)),
+      measure: (_node: TextNodeLike, text: string) => ({ lines: text.includes("\n") ? 1 : wrapCount(text, 10), height: wrapCount(text, 10) }),
     };
     const node = makeNode("aaaaaaaaa b cccccccc");
     await wrapNodes([node], "balance", deps);
@@ -327,7 +344,7 @@ describe("wrapNodes — Balance", () => {
     await wrapNodes([node], "balance", depsAt(20));
     const failing: WrapDeps = {
       ...depsAt(20),
-      countLines: () => {
+      measure: () => {
         throw new Error("clone failed");
       },
     };
@@ -440,7 +457,7 @@ describe("resetNodes", () => {
     await wrapNodes([node], "pretty", deps);
     const changing = { loadFonts: async () => Promise.reject(new FontsChangedError()) };
     const result = await resetNodes([node], changing);
-    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 1, skippedMissingFont: 0 });
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1 });
     expect(node.characters).toBe(`Hello beautiful${NBSP}world`);
   });
 

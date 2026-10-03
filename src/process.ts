@@ -1,45 +1,43 @@
 import { applyPretty, balanceToLines, hasLineBreak, shouldSkip } from "./algorithm";
 import { FontsChangedError } from "./errors";
-import { setText } from "./text";
-
-export { setText };
+import { setText, type EditableText } from "./text";
 
 export type WrapMode = "balance" | "pretty";
 
 /** The parts of Figma's TextNode this module uses, so tests can pass plain objects. */
-export interface TextNodeLike {
-  name: string;
-  characters: string;
+export interface TextNodeLike extends EditableText {
   textAutoResize: string;
   hasMissingFont: boolean;
   /** True once the layer has been deleted. */
   removed: boolean;
   getPluginData(key: string): string;
   setPluginData(key: string, value: string): void;
-  insertCharacters(start: number, characters: string, useStyle?: "BEFORE" | "AFTER"): void;
-  deleteCharacters(start: number, end: number): void;
 }
 
 export interface WrapDeps {
   loadFonts(node: TextNodeLike): Promise<void>;
-  /** Rendered line count of `text` at the node's width, measured without touching the node. `text` has no line breaks. */
-  countLines(node: TextNodeLike, text: string): number;
-  /** Height of `text` wrapped at the node's width, line breaks included, measured without touching the node. */
-  textHeight(node: TextNodeLike, text: string): number;
+  /**
+   * Lay `text` out at the node's width without touching the node: its height,
+   * and its line count (only meaningful for text without line breaks).
+   */
+  measure(node: TextNodeLike, text: string): { lines: number; height: number };
 }
 
 export interface ProcessResult {
   changed: number;
   failed: number;
+  /** Layers whose edits were kept as typed (Reset). */
   skippedEdited: number;
   skippedMissingFont: number;
+  /** Layers that changed while the action ran, so were left alone; running the action again picks them up. */
+  interrupted: number;
 }
 
 const ORIGINAL_KEY = "originalText";
 const APPLIED_KEY = "appliedText";
 
 function emptyResult(): ProcessResult {
-  return { changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0 };
+  return { changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 };
 }
 
 /** True when the layer still shows exactly what the plugin last wrote to it. */
@@ -137,21 +135,25 @@ function restore(node: TextNodeLike, before: ReturnType<typeof snapshot>): void 
  */
 function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
   if (hasLineBreak(source)) return source;
-  const target = balanceToLines(source, deps.countLines(node, source));
+  const { lines, height } = deps.measure(node, source);
+  const target = balanceToLines(source, lines);
   if (target === source) return source;
-  return deps.textHeight(node, target) <= deps.textHeight(node, source) ? target : source;
+  return deps.measure(node, target).height <= height ? target : source;
 }
 
 /**
  * Load the layer's fonts. Returns false when the layer should be left alone:
- * deleted, or its fonts changed while loading because the designer is editing it.
+ * deleted meanwhile (skipped quietly), or its fonts changed while loading
+ * because the designer is editing it (counted as interrupted).
  */
 async function loadFontsFor(node: TextNodeLike, deps: Pick<WrapDeps, "loadFonts">, result: ProcessResult): Promise<boolean> {
   try {
     await deps.loadFonts(node);
   } catch (e) {
+    // Figma throws on any property of a deleted layer, so check removal first
+    if (node.removed) return false;
     if (!(e instanceof FontsChangedError)) throw e;
-    result.skippedEdited++;
+    result.interrupted++;
     return false;
   }
   return !node.removed;
@@ -162,6 +164,8 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
 
   for (const node of nodes) {
     try {
+      // Deleted while earlier layers were processed
+      if (node.removed) continue;
       const source = sourceText(node);
       if (shouldSkip(source, node.textAutoResize)) continue;
 
@@ -173,7 +177,7 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
       if (!(await loadFontsFor(node, deps, result))) continue;
       // A designer or another action may edit the layer while fonts load.
       if (!stillMatches(node, before)) {
-        result.skippedEdited++;
+        result.interrupted++;
         continue;
       }
       const keepsPretty = mode === "balance" && lastWriteWasPretty(node);
@@ -208,6 +212,8 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
 
   for (const node of nodes) {
     try {
+      // Deleted while earlier layers were processed
+      if (node.removed) continue;
       const original = node.getPluginData(ORIGINAL_KEY);
       // Never wrapped by this plugin — leave the designer's text (and any NBSPs they typed) alone
       if (!original) continue;
@@ -229,7 +235,7 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
       const before = snapshot(node);
       if (!(await loadFontsFor(node, deps, result))) continue;
       if (!stillMatches(node, before)) {
-        result.skippedEdited++;
+        result.interrupted++;
         continue;
       }
       try {

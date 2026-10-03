@@ -1,4 +1,4 @@
-import type { Action, PluginRequest, ToastVariant, UiMessage } from "./messages";
+import { WINDOW_SIZE, type Action, type PluginRequest, type ToastVariant, type UiMessage } from "./messages";
 
 const balanceCard = document.getElementById("balanceCard") as HTMLButtonElement;
 const prettyCard = document.getElementById("prettyCard") as HTMLButtonElement;
@@ -14,23 +14,25 @@ const TOAST_MS: Record<ToastVariant, number | null> = {
   error: null,
 };
 
-/** The window height src/code.ts opens the plugin with. */
-const BASE_HEIGHT = 460;
+/** How long a hidden toast takes to fade out (its 200ms transition, plus a margin). */
+const TOAST_FADE_MS = 250;
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let toastFrame: number | null = null;
-let windowHeight = BASE_HEIGHT;
+let shrinkTimer: ReturnType<typeof setTimeout> | null = null;
+let windowHeight = WINDOW_SIZE.height;
 let isBusy = false;
 
 function send(request: PluginRequest): void {
   parent.postMessage({ pluginMessage: request }, "*");
 }
 
-/** Grow the window while a long toast would cover the panel; shrink it back when the toast hides. */
-function fitWindow(toastShown: boolean): void {
+/** Size the window so the toast, when shown, sits below the panel instead of covering it. */
+function fitWindow(): void {
   const panelBottom = (document.querySelector("main") as HTMLElement).getBoundingClientRect().bottom;
-  const needed = toastShown ? Math.ceil(panelBottom + toastEl.offsetHeight + 16) : BASE_HEIGHT;
-  const height = Math.max(BASE_HEIGHT, needed);
+  const shown = toastEl.classList.contains("toast-visible");
+  const needed = shown ? Math.ceil(panelBottom + toastEl.offsetHeight + 16) : WINDOW_SIZE.height;
+  const height = Math.max(WINDOW_SIZE.height, needed);
   if (height === windowHeight) return;
   windowHeight = height;
   send({ type: "resize", height });
@@ -43,7 +45,12 @@ function hideToast(): void {
   if (toastFrame !== null) cancelAnimationFrame(toastFrame);
   toastFrame = null;
   toastEl.classList.remove("toast-visible");
-  fitWindow(false);
+  // Shrink once the toast has faded out; a toast that replaces it first cancels this
+  if (shrinkTimer) clearTimeout(shrinkTimer);
+  shrinkTimer = setTimeout(() => {
+    shrinkTimer = null;
+    fitWindow();
+  }, TOAST_FADE_MS);
 }
 
 function showToast(message: string, variant: ToastVariant): void {
@@ -53,9 +60,11 @@ function showToast(message: string, variant: ToastVariant): void {
   toastEl.className = `toast toast-${variant}`;
   toastFrame = requestAnimationFrame(() => {
     toastFrame = null;
+    if (shrinkTimer) clearTimeout(shrinkTimer);
+    shrinkTimer = null;
     toastEl.textContent = message;
     toastEl.classList.add("toast-visible");
-    fitWindow(true);
+    fitWindow();
   });
 
   const duration = TOAST_MS[variant];

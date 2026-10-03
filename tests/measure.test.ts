@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countLines, textHeight } from "../src/measure";
+import { measureText } from "../src/measure";
 
 const LINE = 20;
 /** With vertical trim ("CAP_HEIGHT"), the first line is only cap-height tall. */
@@ -86,41 +86,33 @@ function makeLayer(text: string, width: number, textAutoResize = "HEIGHT", leadi
   return { layer: layer as any, probes, edits: () => edits };
 }
 
-describe("countLines", () => {
+describe("measureText", () => {
   it("counts the lines a paragraph wraps to", () => {
     const text = "The quick brown fox jumps over the lazy dog";
     const { layer } = makeLayer(text, 30);
-    expect(countLines(layer, text)).toBe(2);
+    expect(measureText(layer, text)).toEqual({ lines: 2, height: 2 * LINE });
   });
 
   it("measures the given text, not what the layer shows", () => {
-    // The layer currently shows a balanced version; the count is for the unbroken source
+    // The layer currently shows a balanced version; the measurement is for the unbroken source
     const { layer } = makeLayer("The quick brown fox\njumps over the lazy dog", 50);
-    expect(countLines(layer, "The quick brown fox jumps over the lazy dog")).toBe(1);
+    expect(measureText(layer, "The quick brown fox jumps over the lazy dog")).toEqual({ lines: 1, height: LINE });
   });
 
   it("counts correctly when the text uses vertical trim", () => {
     const text = "The quick brown fox jumps over the lazy dog";
     const { layer } = makeLayer(text, 30, "HEIGHT", "CAP_HEIGHT");
-    expect(countLines(layer, text)).toBe(2);
+    expect(measureText(layer, text).lines).toBe(2);
   });
 
-  it("returns 1 for auto-width layers without cloning them", () => {
-    const { layer, probes } = makeLayer("The quick brown fox", 10, "WIDTH_AND_HEIGHT");
-    expect(countLines(layer, "The quick brown fox")).toBe(1);
-    expect(probes).toHaveLength(0);
-  });
-});
-
-describe("textHeight", () => {
   it("includes line breaks in the height", () => {
     const { layer } = makeLayer("The quick brown fox jumps over the lazy dog", 30);
-    expect(textHeight(layer, "The quick brown fox\njumps over the lazy dog")).toBe(2 * LINE);
+    expect(measureText(layer, "The quick brown fox\njumps over the lazy dog").height).toBe(2 * LINE);
   });
 
   it("shows when a balanced split makes the text taller", () => {
     const { layer } = makeLayer("aaaaaaaaa b cccccccc", 10);
-    expect(textHeight(layer, "aaaaaaaaa b\ncccccccc")).toBeGreaterThan(textHeight(layer, "aaaaaaaaa b cccccccc"));
+    expect(measureText(layer, "aaaaaaaaa b\ncccccccc").height).toBeGreaterThan(measureText(layer, "aaaaaaaaa b cccccccc").height);
   });
 });
 
@@ -128,9 +120,8 @@ describe("probes", () => {
   it("turn off truncation and trim, are always removed, and never edit the layer", () => {
     const text = "The quick brown fox jumps over the lazy dog";
     const { layer, probes, edits } = makeLayer(text, 30, "HEIGHT", "CAP_HEIGHT");
-    countLines(layer, text);
-    textHeight(layer, text);
-    expect(probes).toHaveLength(2);
+    measureText(layer, text);
+    expect(probes).toHaveLength(1);
     expect(probes.every((p) => p.textTruncation === "DISABLED" && p.leadingTrim === "NONE" && p.removed)).toBe(true);
     expect(edits()).toBe(0);
     expect(layer.characters).toBe(text);
@@ -138,7 +129,7 @@ describe("probes", () => {
 
   it("are removed even when measuring fails", () => {
     const { layer, probes } = makeLayer("Hello world", 30);
-    expect(() => countLines(layer, "Hello")).toThrow(/length would change/);
+    expect(() => measureText(layer, "Hello")).toThrow(/length would change/);
     expect(probes[0].removed).toBe(true);
   });
 });

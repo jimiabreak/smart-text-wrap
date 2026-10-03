@@ -3,6 +3,9 @@ import type { ProcessResult } from "./process";
 export type Action = "balance" | "pretty" | "reset";
 export type ToastVariant = "success" | "info" | "error";
 
+/** Plugin window size, shared by the plugin and the panel. The panel asks for more height only while a long toast would cover it. */
+export const WINDOW_SIZE = { width: 280, height: 460, maxHeight: 800 };
+
 /** A message the UI sends to the plugin. */
 export type PluginRequest = { type: Action } | { type: "resize"; height: number };
 
@@ -36,8 +39,9 @@ export function describeResult(action: Action, result: ProcessResult): { type: T
   if (result.failed > 0) {
     problems.push(`Couldn't update ${layers(result.failed)}. Try again, or reopen the plugin.`);
   }
-  const kept = `Kept ${layers(result.skippedEdited)} you edited.`;
-  const notes = result.skippedEdited > 0 ? [action === "reset" ? kept : `${kept} Run the action again if needed.`] : [];
+  const notes: string[] = [];
+  if (result.skippedEdited > 0) notes.push(`Kept ${layers(result.skippedEdited)} you edited.`);
+  if (result.interrupted > 0) notes.push(`Skipped ${layers(result.interrupted)} that changed during the action. Run it again.`);
 
   const parts = result.changed > 0 ? [`${DONE[action](result.changed)}.`, ...problems, ...notes] : [...problems, ...notes];
 

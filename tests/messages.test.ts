@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { describeResult, isAction } from "../src/messages";
 
-const result = (changes: Partial<{ changed: number; failed: number; skippedEdited: number; skippedMissingFont: number }>) => ({
+const result = (changes: Partial<{ changed: number; failed: number; skippedEdited: number; skippedMissingFont: number; interrupted: number }>) => ({
   changed: 0,
   failed: 0,
   skippedEdited: 0,
   skippedMissingFont: 0,
+  interrupted: 0,
   ...changes,
 });
 
@@ -54,11 +55,15 @@ describe("describeResult", () => {
   });
 });
 
-describe("describeResult — layers edited during an action", () => {
-  it("suggests running Balance or Pretty again", () => {
-    expect(describeResult("pretty", result({ changed: 1, skippedEdited: 1 }))).toEqual({
+describe("describeResult — layers that changed during an action", () => {
+  it("asks the designer to run the action again", () => {
+    expect(describeResult("pretty", result({ changed: 1, interrupted: 1 }))).toEqual({
       type: "success",
-      message: "Prevented orphans in 1 text layer. Kept 1 text layer you edited. Run the action again if needed.",
+      message: "Prevented orphans in 1 text layer. Skipped 1 text layer that changed during the action. Run it again.",
+    });
+    expect(describeResult("reset", result({ interrupted: 2 }))).toEqual({
+      type: "info",
+      message: "Skipped 2 text layers that changed during the action. Run it again.",
     });
   });
 });
