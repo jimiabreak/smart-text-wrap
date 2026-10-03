@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { wrapNodes, resetNodes, setText, type TextNodeLike, type WrapDeps } from "../src/process";
+import { FontsChangedError } from "../src/errors";
 
 const NBSP = "\u00A0";
 
@@ -16,6 +17,9 @@ function makeNode(text: string, opts: { textAutoResize?: string; hasMissingFont?
     name: "Text",
     textAutoResize: opts.textAutoResize ?? "HEIGHT",
     hasMissingFont: opts.hasMissingFont ?? false,
+    removed: false,
+    /** Number of character edits the plugin made through insertCharacters. */
+    writes: 0,
     get characters() {
       return chars;
     },
@@ -31,6 +35,7 @@ function makeNode(text: string, opts: { textAutoResize?: string; hasMissingFont?
       data[key] = value;
     },
     insertCharacters(start: number, inserted: string, useStyle: "BEFORE" | "AFTER" = "BEFORE") {
+      this.writes++;
       const copied = useStyle === "BEFORE" ? (styles[start - 1] ?? styles[start]) : (styles[start] ?? styles[start - 1]);
       chars = chars.slice(0, start) + inserted + chars.slice(start);
       styles = [...styles.slice(0, start), ...inserted.split("").map(() => copied), ...styles.slice(start)];
@@ -70,8 +75,8 @@ function wrapCount(text: string, width: number): number {
 function depsAt(width: number): WrapDeps {
   return {
     loadFonts: async () => {},
-    countLines: (node: TextNodeLike) => wrapCount(node.characters, width),
-    textHeight: (node: TextNodeLike) => wrapCount(node.characters, width),
+    countLines: (_node: TextNodeLike, text: string) => wrapCount(text, width),
+    textHeight: (_node: TextNodeLike, text: string) => wrapCount(text, width),
   };
 }
 
@@ -220,6 +225,26 @@ describe("wrapNodes", () => {
     expect(node.getPluginData("originalText")).toBe("A completely rewritten paragraph by the designer");
   });
 
+  it("skips a layer whose fonts change while loading, as an edit rather than a failure", async () => {
+    const node = makeNode("Hello beautiful world");
+    const changing: WrapDeps = { ...deps, loadFonts: async () => Promise.reject(new FontsChangedError()) };
+    const result = await wrapNodes([node], "pretty", changing);
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 1, skippedMissingFont: 0 });
+    expect(node.characters).toBe("Hello beautiful world");
+  });
+
+  it("quietly skips a layer deleted while its fonts load", async () => {
+    const node = makeNode("Hello beautiful world");
+    const deleting: WrapDeps = {
+      ...deps,
+      loadFonts: async () => {
+        node.removed = true;
+      },
+    };
+    const result = await wrapNodes([node], "pretty", deleting);
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0 });
+  });
+
   it("skips layers with missing fonts without touching them", async () => {
     const node = makeNode("Hello beautiful world", { hasMissingFont: true });
     const result = await wrapNodes([node], "pretty", deps);
@@ -290,7 +315,7 @@ describe("wrapNodes — Balance", () => {
     // Figma's one-line pass can't count lines once "\n" is present; only textHeight may judge the result
     const deps: WrapDeps = {
       ...depsAt(10),
-      countLines: (node: TextNodeLike) => (node.characters.includes("\n") ? 1 : wrapCount(node.characters, 10)),
+      countLines: (_node: TextNodeLike, text: string) => (text.includes("\n") ? 1 : wrapCount(text, 10)),
     };
     const node = makeNode("aaaaaaaaa b cccccccc");
     await wrapNodes([node], "balance", deps);
@@ -351,6 +376,20 @@ describe("wrapNodes — Balance", () => {
     expect(node.getPluginData("originalText")).toBe("A warm welcome to our product");
   });
 
+  it("never writes to the layer while measuring", async () => {
+    // Rejected: the balanced split would be taller, so the layer must not be touched at all
+    const node = makeNode("aaaaaaaaa b cccccccc");
+    await wrapNodes([node], "balance", depsAt(10));
+    expect(node.writes).toBe(0);
+  });
+
+  it("treats Figma's soft line break as an existing break", async () => {
+    const node = makeNode("Smart Text Wrap\u2028prevents orphans and balances text");
+    const result = await wrapNodes([node], "balance", depsAt(10));
+    expect(node.characters).toBe("Smart Text Wrap\u2028prevents orphans and balances text");
+    expect(result.changed).toBe(0);
+  });
+
   it("leaves multi-paragraph text alone", async () => {
     const node = makeNode("First paragraph is here\nSecond paragraph is here");
     await wrapNodes([node], "balance", depsAt(10));
@@ -394,6 +433,15 @@ describe("resetNodes", () => {
     const result = await resetNodes([node], deps);
     expect(node.characters).toBe(`Set in 16${NBSP}px type`);
     expect(result.changed).toBe(0);
+  });
+
+  it("skips resetting a layer whose fonts change while loading", async () => {
+    const node = makeNode("Hello beautiful world");
+    await wrapNodes([node], "pretty", deps);
+    const changing = { loadFonts: async () => Promise.reject(new FontsChangedError()) };
+    const result = await resetNodes([node], changing);
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 1, skippedMissingFont: 0 });
+    expect(node.characters).toBe(`Hello beautiful${NBSP}world`);
   });
 
   it("skips resetting layers with missing fonts", async () => {

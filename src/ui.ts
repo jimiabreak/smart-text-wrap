@@ -1,4 +1,4 @@
-import type { Action, ToastVariant, UiMessage } from "./messages";
+import type { Action, PluginRequest, ToastVariant, UiMessage } from "./messages";
 
 const balanceCard = document.getElementById("balanceCard") as HTMLButtonElement;
 const prettyCard = document.getElementById("prettyCard") as HTMLButtonElement;
@@ -14,13 +14,36 @@ const TOAST_MS: Record<ToastVariant, number | null> = {
   error: null,
 };
 
+/** The window height src/code.ts opens the plugin with. */
+const BASE_HEIGHT = 460;
+
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let toastFrame: number | null = null;
+let windowHeight = BASE_HEIGHT;
 let isBusy = false;
+
+function send(request: PluginRequest): void {
+  parent.postMessage({ pluginMessage: request }, "*");
+}
+
+/** Grow the window while a long toast would cover the panel; shrink it back when the toast hides. */
+function fitWindow(toastShown: boolean): void {
+  const panelBottom = (document.querySelector("main") as HTMLElement).getBoundingClientRect().bottom;
+  const needed = toastShown ? Math.ceil(panelBottom + toastEl.offsetHeight + 16) : BASE_HEIGHT;
+  const height = Math.max(BASE_HEIGHT, needed);
+  if (height === windowHeight) return;
+  windowHeight = height;
+  send({ type: "resize", height });
+}
 
 function hideToast(): void {
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = null;
+  // A toast still waiting for its frame must not appear after it was hidden
+  if (toastFrame !== null) cancelAnimationFrame(toastFrame);
+  toastFrame = null;
   toastEl.classList.remove("toast-visible");
+  fitWindow(false);
 }
 
 function showToast(message: string, variant: ToastVariant): void {
@@ -28,9 +51,11 @@ function showToast(message: string, variant: ToastVariant): void {
   // Empty the region first so a repeated message is announced again
   toastEl.textContent = "";
   toastEl.className = `toast toast-${variant}`;
-  requestAnimationFrame(() => {
+  toastFrame = requestAnimationFrame(() => {
+    toastFrame = null;
     toastEl.textContent = message;
     toastEl.classList.add("toast-visible");
+    fitWindow(true);
   });
 
   const duration = TOAST_MS[variant];
@@ -50,7 +75,7 @@ function handleAction(type: Action): void {
   if (isBusy) return;
   hideToast();
   setBusy(true);
-  parent.postMessage({ pluginMessage: { type } }, "*");
+  send({ type });
 }
 
 balanceCard.addEventListener("click", () => handleAction("balance"));

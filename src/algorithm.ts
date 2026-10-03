@@ -55,6 +55,11 @@ export function applyPretty(text: string): string {
 /** Chromium stops balancing text that runs past this many lines; longer text is left alone. */
 export const MAX_BALANCE_LINES = 6;
 
+/** True when `text` already has a line break: "\n" (new paragraph) or U+2028 (Figma's Shift+Enter line break). */
+export function hasLineBreak(text: string): boolean {
+  return /[\n\u2028]/.test(text);
+}
+
 /**
  * Break `text` into `lineCount` lines of roughly equal length by turning
  * `lineCount - 1` regular spaces into line breaks.
@@ -64,7 +69,7 @@ export const MAX_BALANCE_LINES = 6;
  * or too few spaces to break at.
  */
 export function balanceToLines(text: string, lineCount: number): string {
-  if (lineCount < 2 || lineCount > MAX_BALANCE_LINES || text.includes("\n")) return text;
+  if (lineCount < 2 || lineCount > MAX_BALANCE_LINES || hasLineBreak(text)) return text;
 
   const spaces = innerSpaces(text);
   if (spaces.length < lineCount - 1) return text;

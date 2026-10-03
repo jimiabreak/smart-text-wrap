@@ -24,26 +24,56 @@ function wrapCount(text: string, width: number): number {
   return lines;
 }
 
+type Probe = {
+  characters: string;
+  name: string;
+  textAutoResize: string;
+  textTruncation: string;
+  leadingTrim: string;
+  removed: boolean;
+  readonly height: number;
+  insertCharacters(start: number, characters: string): void;
+  deleteCharacters(start: number, end: number): void;
+  remove(): void;
+};
+
 /**
  * A stand-in for a Figma TextNode whose clones lay text out the way Figma does:
  * "HEIGHT" wraps at the layer's width, "WIDTH_AND_HEIGHT" never wraps, so only
  * line breaks start new lines. Each line is LINE px tall.
  */
 function makeLayer(text: string, width: number, textAutoResize = "HEIGHT", leadingTrim = "NONE") {
-  const probes: { textAutoResize: string; textTruncation: string; leadingTrim: string; removed: boolean }[] = [];
+  const probes: Probe[] = [];
+  let edits = 0;
   const layer = {
+    name: "Layer",
     characters: text,
     textAutoResize,
     leadingTrim,
+    insertCharacters() {
+      edits++;
+    },
+    deleteCharacters() {
+      edits++;
+    },
     clone() {
-      const probe = {
+      const probe: Probe = {
+        name: "Layer",
+        characters: layer.characters,
         textAutoResize,
         textTruncation: "ENDING",
         leadingTrim,
         removed: false,
         get height() {
-          const lines = probe.textAutoResize === "WIDTH_AND_HEIGHT" ? text.split("\n").length : wrapCount(text, width);
+          const t = probe.characters;
+          const lines = probe.textAutoResize === "WIDTH_AND_HEIGHT" ? t.split("\n").length : wrapCount(t, width);
           return probe.leadingTrim === "CAP_HEIGHT" ? (lines - 1) * LINE + CAP : lines * LINE;
+        },
+        insertCharacters(start: number, inserted: string) {
+          probe.characters = probe.characters.slice(0, start) + inserted + probe.characters.slice(start);
+        },
+        deleteCharacters(start: number, end: number) {
+          probe.characters = probe.characters.slice(0, start) + probe.characters.slice(end);
         },
         remove() {
           probe.removed = true;
@@ -53,46 +83,62 @@ function makeLayer(text: string, width: number, textAutoResize = "HEIGHT", leadi
       return probe;
     },
   };
-  return { layer: layer as any, probes };
+  return { layer: layer as any, probes, edits: () => edits };
 }
 
 describe("countLines", () => {
   it("counts the lines a paragraph wraps to", () => {
-    const { layer } = makeLayer("The quick brown fox jumps over the lazy dog", 30);
-    expect(countLines(layer)).toBe(2);
+    const text = "The quick brown fox jumps over the lazy dog";
+    const { layer } = makeLayer(text, 30);
+    expect(countLines(layer, text)).toBe(2);
+  });
+
+  it("measures the given text, not what the layer shows", () => {
+    // The layer currently shows a balanced version; the count is for the unbroken source
+    const { layer } = makeLayer("The quick brown fox\njumps over the lazy dog", 50);
+    expect(countLines(layer, "The quick brown fox jumps over the lazy dog")).toBe(1);
   });
 
   it("counts correctly when the text uses vertical trim", () => {
-    const { layer } = makeLayer("The quick brown fox jumps over the lazy dog", 30, "HEIGHT", "CAP_HEIGHT");
-    expect(countLines(layer)).toBe(2);
+    const text = "The quick brown fox jumps over the lazy dog";
+    const { layer } = makeLayer(text, 30, "HEIGHT", "CAP_HEIGHT");
+    expect(countLines(layer, text)).toBe(2);
   });
 
   it("returns 1 for auto-width layers without cloning them", () => {
     const { layer, probes } = makeLayer("The quick brown fox", 10, "WIDTH_AND_HEIGHT");
-    expect(countLines(layer)).toBe(1);
+    expect(countLines(layer, "The quick brown fox")).toBe(1);
     expect(probes).toHaveLength(0);
   });
 });
 
 describe("textHeight", () => {
   it("includes line breaks in the height", () => {
-    const { layer } = makeLayer("The quick brown fox\njumps over the lazy dog", 30);
-    expect(textHeight(layer)).toBe(2 * LINE);
+    const { layer } = makeLayer("The quick brown fox jumps over the lazy dog", 30);
+    expect(textHeight(layer, "The quick brown fox\njumps over the lazy dog")).toBe(2 * LINE);
   });
 
   it("shows when a balanced split makes the text taller", () => {
-    const source = makeLayer("aaaaaaaaa b cccccccc", 10).layer;
-    const balanced = makeLayer("aaaaaaaaa b\ncccccccc", 10).layer;
-    expect(textHeight(balanced)).toBeGreaterThan(textHeight(source));
+    const { layer } = makeLayer("aaaaaaaaa b cccccccc", 10);
+    expect(textHeight(layer, "aaaaaaaaa b\ncccccccc")).toBeGreaterThan(textHeight(layer, "aaaaaaaaa b cccccccc"));
   });
 });
 
 describe("probes", () => {
-  it("turns off truncation and removes every clone", () => {
-    const { layer, probes } = makeLayer("The quick brown fox jumps over the lazy dog", 30);
-    countLines(layer);
-    textHeight(layer);
+  it("turn off truncation and trim, are always removed, and never edit the layer", () => {
+    const text = "The quick brown fox jumps over the lazy dog";
+    const { layer, probes, edits } = makeLayer(text, 30, "HEIGHT", "CAP_HEIGHT");
+    countLines(layer, text);
+    textHeight(layer, text);
     expect(probes).toHaveLength(2);
-    expect(probes.every((p) => p.textTruncation === "DISABLED" && p.removed)).toBe(true);
+    expect(probes.every((p) => p.textTruncation === "DISABLED" && p.leadingTrim === "NONE" && p.removed)).toBe(true);
+    expect(edits()).toBe(0);
+    expect(layer.characters).toBe(text);
+  });
+
+  it("are removed even when measuring fails", () => {
+    const { layer, probes } = makeLayer("Hello world", 30);
+    expect(() => countLines(layer, "Hello")).toThrow(/length would change/);
+    expect(probes[0].removed).toBe(true);
   });
 });

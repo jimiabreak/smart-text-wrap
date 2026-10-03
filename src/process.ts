@@ -1,4 +1,8 @@
-import { applyPretty, balanceToLines, shouldSkip } from "./algorithm";
+import { applyPretty, balanceToLines, hasLineBreak, shouldSkip } from "./algorithm";
+import { FontsChangedError } from "./errors";
+import { setText } from "./text";
+
+export { setText };
 
 export type WrapMode = "balance" | "pretty";
 
@@ -8,6 +12,8 @@ export interface TextNodeLike {
   characters: string;
   textAutoResize: string;
   hasMissingFont: boolean;
+  /** True once the layer has been deleted. */
+  removed: boolean;
   getPluginData(key: string): string;
   setPluginData(key: string, value: string): void;
   insertCharacters(start: number, characters: string, useStyle?: "BEFORE" | "AFTER"): void;
@@ -16,10 +22,10 @@ export interface TextNodeLike {
 
 export interface WrapDeps {
   loadFonts(node: TextNodeLike): Promise<void>;
-  /** Rendered line count of the node's current text at its current width. Only called on text without line breaks. */
-  countLines(node: TextNodeLike): number;
-  /** Height of the node's current text when it wraps at its current width, line breaks included. */
-  textHeight(node: TextNodeLike): number;
+  /** Rendered line count of `text` at the node's width, measured without touching the node. `text` has no line breaks. */
+  countLines(node: TextNodeLike, text: string): number;
+  /** Height of `text` wrapped at the node's width, line breaks included, measured without touching the node. */
+  textHeight(node: TextNodeLike, text: string): number;
 }
 
 export interface ProcessResult {
@@ -58,15 +64,13 @@ function withoutPluginSwaps(original: string, applied: string, current: string):
   let suffix = 0;
   while (suffix < shorter - prefix && applied[applied.length - 1 - suffix] === current[current.length - 1 - suffix]) suffix++;
 
-  let result = current;
+  const result = current.split("");
   for (let i = 0; i < applied.length; i++) {
     if (original[i] === applied[i]) continue;
-    let at = -1;
-    if (i < prefix) at = i;
-    else if (i >= applied.length - suffix) at = i - applied.length + current.length;
-    if (at !== -1) result = result.slice(0, at) + original[i] + result.slice(at + 1);
+    if (i < prefix) result[i] = original[i];
+    else if (i >= applied.length - suffix) result[i - applied.length + current.length] = original[i];
   }
-  return result;
+  return result.join("");
 }
 
 /**
@@ -128,42 +132,29 @@ function restore(node: TextNodeLike, before: ReturnType<typeof snapshot>): void 
 }
 
 /**
- * Change the node's text to `target` one character at a time, so bold, links
- * and other range styles survive. Assigning `characters` would reset them.
- * The plugin only ever swaps a regular space for an NBSP or a line break (and
- * back), so `target` always has the same length as the current text.
+ * Balance against the layer's real line count, and keep the result only if the
+ * layer doesn't get taller. Measures copies, so the layer itself is never touched.
  */
-export function setText(node: TextNodeLike, target: string): void {
-  const current = node.characters;
-  if (current.length !== target.length) {
-    throw new Error(`Refusing to rewrite "${node.name}": length would change from ${current.length} to ${target.length}`);
-  }
-  for (let i = 0; i < target.length; i++) {
-    if (current[i] !== target[i]) {
-      // Insert after the old character so the new one copies its style, then drop the old one
-      node.insertCharacters(i + 1, target[i], "BEFORE");
-      node.deleteCharacters(i, i + 1);
-    }
-  }
+function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
+  if (hasLineBreak(source)) return source;
+  const target = balanceToLines(source, deps.countLines(node, source));
+  if (target === source) return source;
+  return deps.textHeight(node, target) <= deps.textHeight(node, source) ? target : source;
 }
 
-/** Balance against the layer's real line count, and keep the result only if the layer doesn't get taller. */
-function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
-  if (source.includes("\n")) return source;
-  const shown = node.characters;
+/**
+ * Load the layer's fonts. Returns false when the layer should be left alone:
+ * deleted, or its fonts changed while loading because the designer is editing it.
+ */
+async function loadFontsFor(node: TextNodeLike, deps: Pick<WrapDeps, "loadFonts">, result: ProcessResult): Promise<boolean> {
   try {
-    setText(node, source); // measure the unwrapped text
-    const lines = deps.countLines(node);
-    const target = balanceToLines(source, lines);
-    if (target === source) return source;
-    const sourceHeight = deps.textHeight(node);
-    setText(node, target);
-    return deps.textHeight(node) <= sourceHeight ? target : source;
+    await deps.loadFonts(node);
   } catch (e) {
-    // Measuring failed: put back what the layer showed before this action
-    setText(node, shown);
-    throw e;
+    if (!(e instanceof FontsChangedError)) throw e;
+    result.skippedEdited++;
+    return false;
   }
+  return !node.removed;
 }
 
 export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: WrapDeps): Promise<ProcessResult> {
@@ -179,7 +170,7 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
         continue;
       }
       const before = snapshot(node);
-      await deps.loadFonts(node);
+      if (!(await loadFontsFor(node, deps, result))) continue;
       // A designer or another action may edit the layer while fonts load.
       if (!stillMatches(node, before)) {
         result.skippedEdited++;
@@ -188,11 +179,8 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
       const keepsPretty = mode === "balance" && lastWriteWasPretty(node);
       try {
         const target = mode === "pretty" ? applyPretty(source) : balance(node, source, deps);
-        if (keepsPretty && target === source) {
-          // Nothing to balance: keep the earlier Pretty result rather than strip it
-          restore(node, before);
-          continue;
-        }
+        // Nothing to balance: keep the earlier Pretty result rather than strip it
+        if (keepsPretty && target === source) continue;
         // Store both recovery entries before committing the final text.
         if (target === source) {
           clearWrapData(node);
@@ -239,7 +227,7 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
         continue;
       }
       const before = snapshot(node);
-      await deps.loadFonts(node);
+      if (!(await loadFontsFor(node, deps, result))) continue;
       if (!stillMatches(node, before)) {
         result.skippedEdited++;
         continue;

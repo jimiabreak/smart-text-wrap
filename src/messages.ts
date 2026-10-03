@@ -3,6 +3,9 @@ import type { ProcessResult } from "./process";
 export type Action = "balance" | "pretty" | "reset";
 export type ToastVariant = "success" | "info" | "error";
 
+/** A message the UI sends to the plugin. */
+export type PluginRequest = { type: Action } | { type: "resize"; height: number };
+
 /** A message the plugin sends to the UI. */
 export type UiMessage = { type: ToastVariant; message: string } | { type: "done" };
 
@@ -33,7 +36,8 @@ export function describeResult(action: Action, result: ProcessResult): { type: T
   if (result.failed > 0) {
     problems.push(`Couldn't update ${layers(result.failed)}. Try again, or reopen the plugin.`);
   }
-  const notes = result.skippedEdited > 0 ? [`Kept ${layers(result.skippedEdited)} you edited. Run the action again if needed.`] : [];
+  const kept = `Kept ${layers(result.skippedEdited)} you edited.`;
+  const notes = result.skippedEdited > 0 ? [action === "reset" ? kept : `${kept} Run the action again if needed.`] : [];
 
   const parts = result.changed > 0 ? [`${DONE[action](result.changed)}.`, ...problems, ...notes] : [...problems, ...notes];
 

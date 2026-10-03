@@ -1,3 +1,5 @@
+import { FontsChangedError } from "./errors";
+
 const loadedFonts = new Set<string>();
 
 function fontKey(font: FontName): string {
@@ -33,6 +35,6 @@ export async function loadFontsForNode(node: TextNode): Promise<void> {
   // A style edit can introduce another font while the requested fonts load.
   // Leave that layer untouched; the next action will load its current fonts.
   if (nodeFonts(node).some((font) => !loadedFonts.has(fontKey(font)))) {
-    throw new Error("Text fonts changed while loading. Try the action again.");
+    throw new FontsChangedError();
   }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { loadFontsForNode, resetFontCache } from "../src/fonts";
+import { FontsChangedError } from "../src/errors";
 
 const mockLoadFontAsync = vi.fn().mockResolvedValue(undefined);
 const MIXED = Symbol("mixed");
@@ -51,6 +52,7 @@ describe("loadFontsForNode", () => {
     node.fontName = { family: "Inter", style: "Bold" };
     release();
     await expect(action).rejects.toThrow("Text fonts changed while loading");
+    await expect(action).rejects.toBeInstanceOf(FontsChangedError);
     await expect(loadFontsForNode(node)).resolves.toBeUndefined();
     expect(mockLoadFontAsync).toHaveBeenLastCalledWith({ family: "Inter", style: "Bold" });
   });

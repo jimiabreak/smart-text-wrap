@@ -83,6 +83,10 @@ describe("balanceToLines", () => {
     expect(balanceToLines("Hello beautiful world\nAnother short line", 4)).toBe("Hello beautiful world\nAnother short line");
   });
 
+  it("leaves text with a soft line break (U+2028) unchanged", () => {
+    expect(balanceToLines("Hello beautiful\u2028world again", 2)).toBe("Hello beautiful\u2028world again");
+  });
+
   it(`leaves text longer than ${MAX_BALANCE_LINES} lines unchanged`, () => {
     const text = "one two three four five six seven eight nine ten";
     expect(balanceToLines(text, MAX_BALANCE_LINES + 1)).toBe(text);

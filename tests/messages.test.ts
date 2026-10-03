@@ -45,11 +45,20 @@ describe("describeResult", () => {
   it("tells the designer their edits were kept on reset", () => {
     expect(describeResult("reset", result({ skippedEdited: 1 }))).toEqual({
       type: "info",
-      message: "Kept 1 text layer you edited. Run the action again if needed.",
+      message: "Kept 1 text layer you edited.",
     });
     expect(describeResult("reset", result({ changed: 2, skippedEdited: 1 }))).toEqual({
       type: "success",
-      message: "Reset 2 text layers. Kept 1 text layer you edited. Run the action again if needed.",
+      message: "Reset 2 text layers. Kept 1 text layer you edited.",
+    });
+  });
+});
+
+describe("describeResult — layers edited during an action", () => {
+  it("suggests running Balance or Pretty again", () => {
+    expect(describeResult("pretty", result({ changed: 1, skippedEdited: 1 }))).toEqual({
+      type: "success",
+      message: "Prevented orphans in 1 text layer. Kept 1 text layer you edited. Run the action again if needed.",
     });
   });
 });

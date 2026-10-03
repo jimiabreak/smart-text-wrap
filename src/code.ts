@@ -12,7 +12,12 @@ import {
   type UiMessage,
 } from "./messages";
 
-figma.showUI(__html__, { width: 280, height: 460, themeColors: true });
+/** Window size. The UI asks for more height only while a long toast would cover the panel. */
+const WIDTH = 280;
+const HEIGHT = 460;
+const MAX_HEIGHT = 800;
+
+figma.showUI(__html__, { width: WIDTH, height: HEIGHT, themeColors: true });
 
 function post(message: UiMessage): void {
   figma.ui.postMessage(message);
@@ -20,8 +25,8 @@ function post(message: UiMessage): void {
 
 const deps: WrapDeps = {
   loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
-  countLines: (node: TextNodeLike) => countLines(node as TextNode),
-  textHeight: (node: TextNodeLike) => textHeight(node as TextNode),
+  countLines: (node: TextNodeLike, text: string) => countLines(node as TextNode, text),
+  textHeight: (node: TextNodeLike, text: string) => textHeight(node as TextNode, text),
 };
 
 async function run(action: Action): Promise<void> {
@@ -43,7 +48,12 @@ async function run(action: Action): Promise<void> {
   post(describeResult(action, result));
 }
 
-figma.ui.onmessage = async (msg: { type: string }) => {
+figma.ui.onmessage = async (msg: { type: string; height?: number }) => {
+  if (msg.type === "resize") {
+    if (typeof msg.height === "number") figma.ui.resize(WIDTH, Math.min(Math.max(Math.round(msg.height), HEIGHT), MAX_HEIGHT));
+    return;
+  }
+
   try {
     if (isAction(msg.type)) await run(msg.type);
   } catch (e) {
