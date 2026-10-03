@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyPretty, applyBalance, balanceToLines, shouldSkip, MAX_BALANCE_LINES } from "../src/algorithm";
+import { applyPretty, balanceToLines, shouldSkip, MAX_BALANCE_LINES } from "../src/algorithm";
 
 describe("applyPretty", () => {
   it("joins the last two words with a non-breaking space", () => {
@@ -43,37 +43,6 @@ describe("applyPretty", () => {
   it("never changes the length of the text", () => {
     const text = "  The quick brown fox\nThis is a extraordinarily sophisticated  ";
     expect(applyPretty(text)).toHaveLength(text.length);
-  });
-});
-
-describe("applyBalance", () => {
-  it("splits text near the midpoint for two roughly equal lines", () => {
-    const result = applyBalance("The quick brown fox jumps");
-    expect(result).toBe("The quick brown\nfox jumps");
-  });
-
-  it("handles short two-word text", () => {
-    expect(applyBalance("Hello World")).toBe("Hello\nWorld");
-  });
-
-  it("returns single-word text unchanged", () => {
-    expect(applyBalance("Hello")).toBe("Hello");
-  });
-
-  it("picks the split closest to the midpoint", () => {
-    expect(applyBalance("A BB CCCCCCCC")).toBe("A BB\nCCCCCCCC");
-  });
-
-  it("keeps leading whitespace and the length of the text", () => {
-    const text = "   indented heading text";
-    expect(applyBalance(text)).toBe("   indented heading\ntext");
-    expect(applyBalance(text)).toHaveLength(text.length);
-  });
-
-  it("handles multi-paragraph text — balances each paragraph independently", () => {
-    expect(applyBalance("Hello beautiful world\nAnother short line")).toBe(
-      "Hello beautiful\nworld\nAnother short\nline"
-    );
   });
 });
 

@@ -52,29 +52,6 @@ export function applyPretty(text: string): string {
   return text.split("\n").map(applyPrettyToLine).join("\n");
 }
 
-function balanceLine(line: string): string {
-  const spaces = innerSpaces(line);
-  if (spaces.length === 0) return line;
-
-  const [start, end] = contentBounds(line);
-  const midpoint = start + (end - start) / 2;
-
-  // First space at or after the midpoint, else the last space before it
-  let split = spaces[spaces.length - 1];
-  for (const i of spaces) {
-    if (i >= Math.ceil(midpoint)) {
-      split = i;
-      break;
-    }
-  }
-
-  return replaceAt(line, split, "\n");
-}
-
-export function applyBalance(text: string): string {
-  return text.split("\n").map(balanceLine).join("\n");
-}
-
 /** Chromium stops balancing text that runs past this many lines; longer text is left alone. */
 export const MAX_BALANCE_LINES = 6;
 
