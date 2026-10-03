@@ -8,13 +8,14 @@ const NBSP = "\u00A0";
  * way Figma tracks range styles: assigning `characters` resets every
  * character to "regular", while insertCharacters/deleteCharacters keep them.
  */
-function makeNode(text: string, opts: { textAutoResize?: string; styles?: string[] } = {}) {
+function makeNode(text: string, opts: { textAutoResize?: string; hasMissingFont?: boolean; styles?: string[] } = {}) {
   const data: Record<string, string> = {};
   let chars = text;
   let styles = opts.styles ?? text.split("").map(() => "regular");
   return {
     name: "Text",
     textAutoResize: opts.textAutoResize ?? "HEIGHT",
+    hasMissingFont: opts.hasMissingFont ?? false,
     get characters() {
       return chars;
     },
@@ -112,6 +113,14 @@ describe("wrapNodes", () => {
     expect(node.getPluginData("originalText")).toBe("A completely rewritten paragraph by the designer");
   });
 
+  it("skips layers with missing fonts without touching them", async () => {
+    const node = makeNode("Hello beautiful world", { hasMissingFont: true });
+    const result = await wrapNodes([node], "pretty", deps);
+    expect(result.skippedMissingFont).toBe(1);
+    expect(result.changed).toBe(0);
+    expect(node.characters).toBe("Hello beautiful world");
+  });
+
   it("keeps bold and other range styles when wrapping", async () => {
     const node = makeNode("Hello beautiful world", { styles: boldStyles() });
     await wrapNodes([node], "pretty", deps);
@@ -159,6 +168,15 @@ describe("resetNodes", () => {
     const result = await resetNodes([node], deps);
     expect(node.characters).toBe(`Set in 16${NBSP}px type`);
     expect(result.changed).toBe(0);
+  });
+
+  it("skips resetting layers with missing fonts", async () => {
+    const node = makeNode("Hello beautiful world");
+    await wrapNodes([node], "pretty", deps);
+    node.hasMissingFont = true;
+    const result = await resetNodes([node], deps);
+    expect(result.skippedMissingFont).toBe(1);
+    expect(node.characters).toBe(`Hello beautiful${NBSP}world`);
   });
 
   it("keeps range styles when resetting", async () => {

@@ -7,6 +7,7 @@ export interface TextNodeLike {
   name: string;
   characters: string;
   textAutoResize: string;
+  hasMissingFont: boolean;
   getPluginData(key: string): string;
   setPluginData(key: string, value: string): void;
   insertCharacters(start: number, characters: string, useStyle?: "BEFORE" | "AFTER"): void;
@@ -21,13 +22,14 @@ export interface ProcessResult {
   changed: number;
   failed: number;
   skippedEdited: number;
+  skippedMissingFont: number;
 }
 
 const ORIGINAL_KEY = "originalText";
 const APPLIED_KEY = "appliedText";
 
 function emptyResult(): ProcessResult {
-  return { changed: 0, failed: 0, skippedEdited: 0 };
+  return { changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0 };
 }
 
 /** True when the layer still shows exactly what the plugin last wrote to it. */
@@ -78,6 +80,10 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
       const source = sourceText(node);
       if (shouldSkip(source, node.textAutoResize)) continue;
 
+      if (node.hasMissingFont) {
+        result.skippedMissingFont++;
+        continue;
+      }
       await deps.loadFonts(node);
 
       const before = node.characters;
@@ -116,6 +122,10 @@ export async function resetNodes(nodes: TextNodeLike[], deps: WrapDeps): Promise
         continue;
       }
 
+      if (node.hasMissingFont) {
+        result.skippedMissingFont++;
+        continue;
+      }
       await deps.loadFonts(node);
       setText(node, original);
       clearWrapData(node);
