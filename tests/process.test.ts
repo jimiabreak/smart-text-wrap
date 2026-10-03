@@ -71,6 +71,7 @@ function depsAt(width: number): WrapDeps {
   return {
     loadFonts: async () => {},
     countLines: (node: TextNodeLike) => wrapCount(node.characters, width),
+    textHeight: (node: TextNodeLike) => wrapCount(node.characters, width),
   };
 }
 
@@ -191,6 +192,32 @@ describe("wrapNodes — Balance", () => {
     expect(node.characters).toBe("aaaaaaaaa b cccccccc");
     expect(result.changed).toBe(0);
     expect(node.getPluginData("originalText")).toBe("");
+  });
+
+  it("rejects a taller result even when line counts of broken text are unreliable", async () => {
+    // Figma's one-line pass can't count lines once "\n" is present; only textHeight may judge the result
+    const deps: WrapDeps = {
+      ...depsAt(10),
+      countLines: (node: TextNodeLike) => (node.characters.includes("\n") ? 1 : wrapCount(node.characters, 10)),
+    };
+    const node = makeNode("aaaaaaaaa b cccccccc");
+    await wrapNodes([node], "balance", deps);
+    expect(node.characters).toBe("aaaaaaaaa b cccccccc");
+  });
+
+  it("puts the text back when measuring fails", async () => {
+    const node = makeNode("The quick brown fox jumps");
+    await wrapNodes([node], "balance", depsAt(20));
+    const failing: WrapDeps = {
+      ...depsAt(20),
+      countLines: () => {
+        throw new Error("clone failed");
+      },
+    };
+    const result = await wrapNodes([node], "balance", failing);
+    expect(result.failed).toBe(1);
+    expect(node.characters).toBe("The quick brown\nfox jumps");
+    expect(node.getPluginData("appliedText")).toBe("The quick brown\nfox jumps");
   });
 
   it("leaves multi-paragraph text alone", async () => {

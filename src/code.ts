@@ -1,6 +1,6 @@
 import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
-import { countLines } from "./measure";
+import { countLines, textHeight } from "./measure";
 import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps } from "./process";
 import {
   describeResult,
@@ -21,6 +21,7 @@ function post(message: UiMessage): void {
 const deps: WrapDeps = {
   loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
   countLines: (node: TextNodeLike) => countLines(node as TextNode),
+  textHeight: (node: TextNodeLike) => textHeight(node as TextNode),
 };
 
 async function run(action: Action): Promise<void> {

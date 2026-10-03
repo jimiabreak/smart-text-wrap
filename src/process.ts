@@ -16,8 +16,10 @@ export interface TextNodeLike {
 
 export interface WrapDeps {
   loadFonts(node: TextNodeLike): Promise<void>;
-  /** Rendered line count of the node's current text at its current width. */
+  /** Rendered line count of the node's current text at its current width. Only called on text without line breaks. */
   countLines(node: TextNodeLike): number;
+  /** Height of the node's current text when it wraps at its current width, line breaks included. */
+  textHeight(node: TextNodeLike): number;
 }
 
 export interface ProcessResult {
@@ -74,15 +76,23 @@ export function setText(node: TextNodeLike, target: string): void {
   }
 }
 
-/** Balance against the layer's real line count, and keep the result only if it doesn't add lines. */
+/** Balance against the layer's real line count, and keep the result only if the layer doesn't get taller. */
 function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
   if (source.includes("\n")) return source;
-  setText(node, source); // measure the unwrapped text
-  const lines = deps.countLines(node);
-  const target = balanceToLines(source, lines);
-  if (target === source) return source;
-  setText(node, target);
-  return deps.countLines(node) <= lines ? target : source;
+  const shown = node.characters;
+  try {
+    setText(node, source); // measure the unwrapped text
+    const lines = deps.countLines(node);
+    const target = balanceToLines(source, lines);
+    if (target === source) return source;
+    const sourceHeight = deps.textHeight(node);
+    setText(node, target);
+    return deps.textHeight(node) <= sourceHeight ? target : source;
+  } catch (e) {
+    // Measuring failed: put back what the layer showed before this action
+    setText(node, shown);
+    throw e;
+  }
 }
 
 export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: WrapDeps): Promise<ProcessResult> {
