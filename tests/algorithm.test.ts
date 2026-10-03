@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyPretty, applyBalance, shouldSkip } from "../src/algorithm";
+import { applyPretty, applyBalance, balanceToLines, shouldSkip, MAX_BALANCE_LINES } from "../src/algorithm";
 
 describe("applyPretty", () => {
   it("joins the last two words with a non-breaking space", () => {
@@ -74,6 +74,51 @@ describe("applyBalance", () => {
     expect(applyBalance("Hello beautiful world\nAnother short line")).toBe(
       "Hello beautiful\nworld\nAnother short\nline"
     );
+  });
+});
+
+describe("balanceToLines", () => {
+  it("splits text near the midpoint for two roughly equal lines", () => {
+    expect(balanceToLines("The quick brown fox jumps", 2)).toBe("The quick brown\nfox jumps");
+  });
+
+  it("handles short two-word text", () => {
+    expect(balanceToLines("Hello World", 2)).toBe("Hello\nWorld");
+  });
+
+  it("picks the split closest to the midpoint", () => {
+    expect(balanceToLines("A BB CCCCCCCC", 2)).toBe("A BB\nCCCCCCCC");
+  });
+
+  it("splits into three lines of similar length", () => {
+    expect(balanceToLines("one two three four five six", 3)).toBe("one two\nthree four\nfive six");
+  });
+
+  it("leaves text that fits on one line unchanged", () => {
+    expect(balanceToLines("Our pricing", 1)).toBe("Our pricing");
+  });
+
+  it("returns single-word text unchanged", () => {
+    expect(balanceToLines("Hello", 2)).toBe("Hello");
+  });
+
+  it("leaves text with too few spaces for the line count unchanged", () => {
+    expect(balanceToLines("Hello world", 3)).toBe("Hello world");
+  });
+
+  it("leaves multi-paragraph text unchanged", () => {
+    expect(balanceToLines("Hello beautiful world\nAnother short line", 4)).toBe("Hello beautiful world\nAnother short line");
+  });
+
+  it(`leaves text longer than ${MAX_BALANCE_LINES} lines unchanged`, () => {
+    const text = "one two three four five six seven eight nine ten";
+    expect(balanceToLines(text, MAX_BALANCE_LINES + 1)).toBe(text);
+  });
+
+  it("keeps leading whitespace and the length of the text", () => {
+    const text = "   indented heading text";
+    expect(balanceToLines(text, 2)).toBe("   indented\nheading text");
+    expect(balanceToLines(text, 2)).toHaveLength(text.length);
   });
 });
 

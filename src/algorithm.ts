@@ -75,6 +75,43 @@ export function applyBalance(text: string): string {
   return text.split("\n").map(balanceLine).join("\n");
 }
 
+/** Chromium stops balancing text that runs past this many lines; longer text is left alone. */
+export const MAX_BALANCE_LINES = 6;
+
+/**
+ * Break `text` into `lineCount` lines of roughly equal length by turning
+ * `lineCount - 1` regular spaces into line breaks.
+ *
+ * Returns `text` unchanged when there is nothing to balance: fewer than two
+ * lines, more than MAX_BALANCE_LINES, text that already contains line breaks,
+ * or too few spaces to break at.
+ */
+export function balanceToLines(text: string, lineCount: number): string {
+  if (lineCount < 2 || lineCount > MAX_BALANCE_LINES || text.includes("\n")) return text;
+
+  const spaces = innerSpaces(text);
+  if (spaces.length < lineCount - 1) return text;
+
+  const [start, end] = contentBounds(text);
+  let result = text;
+  let from = 0;
+
+  for (let k = 1; k < lineCount; k++) {
+    const target = start + ((end - start) * k) / lineCount;
+    // Leave enough spaces after this break for the breaks still to come
+    const lastAllowed = spaces.length - (lineCount - k);
+    let best = from;
+    for (let s = from + 1; s <= lastAllowed; s++) {
+      // On a tie, prefer the later space so earlier lines run slightly longer
+      if (Math.abs(spaces[s] - target) <= Math.abs(spaces[best] - target)) best = s;
+    }
+    result = replaceAt(result, spaces[best], "\n");
+    from = best + 1;
+  }
+
+  return result;
+}
+
 export function shouldSkip(text: string, textAutoResize: string): boolean {
   const trimmed = text.trim();
 
