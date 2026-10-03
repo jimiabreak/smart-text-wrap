@@ -41,4 +41,17 @@ describe("loadFontsForNode", () => {
     expect(mockLoadFontAsync).toHaveBeenCalledWith({ family: "Inter", style: "Bold" });
     expect(mockLoadFontAsync).toHaveBeenCalledTimes(2);
   });
+
+  it("rejects a font introduced while the original font is loading", async () => {
+    const node = { fontName: { family: "Inter", style: "Regular" }, characters: "Hello world" } as any;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    mockLoadFontAsync.mockReturnValueOnce(pending);
+    const action = loadFontsForNode(node);
+    node.fontName = { family: "Inter", style: "Bold" };
+    release();
+    await expect(action).rejects.toThrow("Text fonts changed while loading");
+    await expect(loadFontsForNode(node)).resolves.toBeUndefined();
+    expect(mockLoadFontAsync).toHaveBeenLastCalledWith({ family: "Inter", style: "Bold" });
+  });
 });

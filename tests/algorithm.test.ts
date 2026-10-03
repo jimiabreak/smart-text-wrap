@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyPretty, applyBalance, shouldSkip, resetText } from "../src/algorithm";
+import { applyPretty, balanceToLines, shouldSkip, MAX_BALANCE_LINES } from "../src/algorithm";
 
 describe("applyPretty", () => {
   it("joins the last two words with a non-breaking space", () => {
@@ -14,7 +14,7 @@ describe("applyPretty", () => {
 
   it("joins last three words if last two combined exceed 20 chars", () => {
     expect(applyPretty("This is a extraordinarily sophisticated")).toBe(
-      "This is\u00A0a\u00A0extraordinarily\u00A0sophisticated"
+      "This is a\u00A0extraordinarily\u00A0sophisticated"
     );
   });
 
@@ -35,30 +35,59 @@ describe("applyPretty", () => {
   it("returns two-word text with non-breaking space", () => {
     expect(applyPretty("Hello world")).toBe("Hello\u00A0world");
   });
+
+  it("keeps leading and trailing whitespace", () => {
+    expect(applyPretty("  indented line here  ")).toBe("  indented line\u00A0here  ");
+  });
+
+  it("never changes the length of the text", () => {
+    const text = "  The quick brown fox\nThis is a extraordinarily sophisticated  ";
+    expect(applyPretty(text)).toHaveLength(text.length);
+  });
 });
 
-describe("applyBalance", () => {
+describe("balanceToLines", () => {
   it("splits text near the midpoint for two roughly equal lines", () => {
-    const result = applyBalance("The quick brown fox jumps");
-    expect(result).toBe("The quick brown\nfox jumps");
+    expect(balanceToLines("The quick brown fox jumps", 2)).toBe("The quick brown\nfox jumps");
   });
 
   it("handles short two-word text", () => {
-    expect(applyBalance("Hello World")).toBe("Hello\nWorld");
-  });
-
-  it("returns single-word text unchanged", () => {
-    expect(applyBalance("Hello")).toBe("Hello");
+    expect(balanceToLines("Hello World", 2)).toBe("Hello\nWorld");
   });
 
   it("picks the split closest to the midpoint", () => {
-    expect(applyBalance("A BB CCCCCCCC")).toBe("A BB\nCCCCCCCC");
+    expect(balanceToLines("A BB CCCCCCCC", 2)).toBe("A BB\nCCCCCCCC");
   });
 
-  it("handles multi-paragraph text — balances each paragraph independently", () => {
-    expect(applyBalance("Hello beautiful world\nAnother short line")).toBe(
-      "Hello beautiful\nworld\nAnother short\nline"
-    );
+  it("splits into three lines of similar length", () => {
+    expect(balanceToLines("one two three four five six", 3)).toBe("one two\nthree four\nfive six");
+  });
+
+  it("leaves text that fits on one line unchanged", () => {
+    expect(balanceToLines("Our pricing", 1)).toBe("Our pricing");
+  });
+
+  it("returns single-word text unchanged", () => {
+    expect(balanceToLines("Hello", 2)).toBe("Hello");
+  });
+
+  it("leaves text with too few spaces for the line count unchanged", () => {
+    expect(balanceToLines("Hello world", 3)).toBe("Hello world");
+  });
+
+  it("leaves multi-paragraph text unchanged", () => {
+    expect(balanceToLines("Hello beautiful world\nAnother short line", 4)).toBe("Hello beautiful world\nAnother short line");
+  });
+
+  it(`leaves text longer than ${MAX_BALANCE_LINES} lines unchanged`, () => {
+    const text = "one two three four five six seven eight nine ten";
+    expect(balanceToLines(text, MAX_BALANCE_LINES + 1)).toBe(text);
+  });
+
+  it("keeps leading whitespace and the length of the text", () => {
+    const text = "   indented heading text";
+    expect(balanceToLines(text, 2)).toBe("   indented\nheading text");
+    expect(balanceToLines(text, 2)).toHaveLength(text.length);
   });
 });
 
@@ -94,33 +123,5 @@ describe("shouldSkip", () => {
 
   it("does not skip text with TRUNCATE (fixed width)", () => {
     expect(shouldSkip("Hello beautiful world", "TRUNCATE")).toBe(false);
-  });
-});
-
-describe("resetText", () => {
-  it("replaces non-breaking spaces with regular spaces", () => {
-    expect(resetText("Hello\u00A0world")).toBe("Hello world");
-  });
-
-  it("handles multiple non-breaking spaces", () => {
-    expect(resetText("one\u00A0two\u00A0three")).toBe("one two three");
-  });
-
-  it("removes newlines inserted by balance (restores from original)", () => {
-    expect(resetText("The quick brown\nfox jumps", "The quick brown fox jumps")).toBe(
-      "The quick brown fox jumps"
-    );
-  });
-
-  it("returns original text when provided", () => {
-    expect(resetText("modified\u00A0text", "original text here")).toBe("original text here");
-  });
-
-  it("strips NBSP when no original provided", () => {
-    expect(resetText("Hello\u00A0beautiful\u00A0world")).toBe("Hello beautiful world");
-  });
-
-  it("returns unchanged text if no NBSP and no original", () => {
-    expect(resetText("Hello world")).toBe("Hello world");
   });
 });

@@ -8,7 +8,7 @@ export function resetFontCache(): void {
   loadedFonts.clear();
 }
 
-export async function loadFontsForNode(node: TextNode): Promise<void> {
+function nodeFonts(node: TextNode): FontName[] {
   const fonts: FontName[] = [];
 
   if (node.fontName === figma.mixed) {
@@ -18,7 +18,11 @@ export async function loadFontsForNode(node: TextNode): Promise<void> {
     fonts.push(node.fontName as FontName);
   }
 
-  const toLoad = fonts.filter((f) => !loadedFonts.has(fontKey(f)));
+  return fonts;
+}
+
+export async function loadFontsForNode(node: TextNode): Promise<void> {
+  const toLoad = nodeFonts(node).filter((f) => !loadedFonts.has(fontKey(f)));
 
   await Promise.all(
     toLoad.map(async (font) => {
@@ -26,4 +30,9 @@ export async function loadFontsForNode(node: TextNode): Promise<void> {
       loadedFonts.add(fontKey(font));
     })
   );
+  // A style edit can introduce another font while the requested fonts load.
+  // Leave that layer untouched; the next action will load its current fonts.
+  if (nodeFonts(node).some((font) => !loadedFonts.has(fontKey(font)))) {
+    throw new Error("Text fonts changed while loading. Try the action again.");
+  }
 }

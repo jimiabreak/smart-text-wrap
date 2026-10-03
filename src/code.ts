@@ -1,127 +1,59 @@
-import { applyPretty, applyBalance, shouldSkip, resetText } from "./algorithm";
 import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
+import { countLines, textHeight } from "./measure";
+import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps } from "./process";
+import {
+  describeResult,
+  isAction,
+  NO_SELECTION,
+  NO_TEXT_LAYERS,
+  UNEXPECTED_ERROR,
+  type Action,
+  type UiMessage,
+} from "./messages";
 
-figma.showUI(__html__, { width: 280, height: 380, themeColors: true });
+figma.showUI(__html__, { width: 280, height: 460, themeColors: true });
 
-type WrapMode = "balance" | "pretty";
+function post(message: UiMessage): void {
+  figma.ui.postMessage(message);
+}
 
-async function processSelection(mode: WrapMode): Promise<number> {
+const deps: WrapDeps = {
+  loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
+  countLines: (node: TextNodeLike) => countLines(node as TextNode),
+  textHeight: (node: TextNodeLike) => textHeight(node as TextNode),
+};
+
+async function run(action: Action): Promise<void> {
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
-    figma.ui.postMessage({ type: "error", message: "Select a frame or text layer first" });
-    return 0;
+    post({ type: "error", message: NO_SELECTION });
+    return;
   }
 
   const textNodes = findTextNodes(selection) as TextNode[];
 
   if (textNodes.length === 0) {
-    figma.ui.postMessage({ type: "error", message: "No text layers found in selection" });
-    return 0;
+    post({ type: "error", message: NO_TEXT_LAYERS });
+    return;
   }
 
-  let fixedCount = 0;
-
-  for (const node of textNodes) {
-    try {
-      await loadFontsForNode(node);
-
-      // Always work from original text to prevent double-application
-      const stored = node.getPluginData("originalText");
-      const currentText = node.characters;
-      const sourceText = stored || currentText;
-
-      if (shouldSkip(sourceText, node.textAutoResize)) continue;
-
-      // Store original before first modification
-      if (!stored) {
-        node.setPluginData("originalText", currentText);
-      }
-
-      // Restore to original first if previously modified
-      if (stored && stored !== currentText) {
-        node.characters = stored;
-      }
-
-      const fixed = mode === "pretty" ? applyPretty(sourceText) : applyBalance(sourceText);
-
-      if (fixed !== sourceText) {
-        node.characters = fixed;
-        fixedCount++;
-      }
-    } catch (e) {
-      console.error("Failed to process node:", node.name, e);
-    }
-  }
-
-  return fixedCount;
-}
-
-async function resetSelection(): Promise<number> {
-  const selection = figma.currentPage.selection;
-
-  if (selection.length === 0) {
-    figma.ui.postMessage({ type: "error", message: "Select a frame or text layer first" });
-    return 0;
-  }
-
-  const textNodes = findTextNodes(selection) as TextNode[];
-  let resetCount = 0;
-
-  for (const node of textNodes) {
-    try {
-      const original = node.getPluginData("originalText");
-      const text = node.characters;
-      const restored = resetText(text, original || undefined);
-
-      if (restored !== text) {
-        await loadFontsForNode(node);
-        node.characters = restored;
-        node.setPluginData("originalText", "");
-        resetCount++;
-      }
-    } catch (e) {
-      console.error("Failed to reset node:", node.name, e);
-    }
-  }
-
-  return resetCount;
+  const result = action === "reset" ? await resetNodes(textNodes, deps) : await wrapNodes(textNodes, action, deps);
+  post(describeResult(action, result));
 }
 
 figma.ui.onmessage = async (msg: { type: string }) => {
   try {
-    if (msg.type === "balance") {
-      const count = await processSelection("balance");
-      if (count > 0) {
-        figma.ui.postMessage({ type: "success", message: `Balanced ${count} text layer${count !== 1 ? "s" : ""}` });
-      } else {
-        figma.ui.postMessage({ type: "error", message: "No text needed changes" });
-      }
-    }
-
-    if (msg.type === "pretty") {
-      const count = await processSelection("pretty");
-      if (count > 0) {
-        figma.ui.postMessage({ type: "success", message: `Fixed ${count} text layer${count !== 1 ? "s" : ""}` });
-      } else {
-        figma.ui.postMessage({ type: "error", message: "No text needed changes" });
-      }
-    }
-
-    if (msg.type === "reset") {
-      const count = await resetSelection();
-      if (count > 0) {
-        figma.ui.postMessage({ type: "success", message: `Reset ${count} text layer${count !== 1 ? "s" : ""}` });
-      } else {
-        figma.ui.postMessage({ type: "error", message: "No text to reset" });
-      }
-    }
+    if (isAction(msg.type)) await run(msg.type);
   } catch (e) {
     console.error("Plugin error:", e);
-    figma.ui.postMessage({ type: "error", message: "Something went wrong" });
+    post({ type: "error", message: UNEXPECTED_ERROR });
   }
 
+  // One undo step per action, so ⌘Z reverts only the latest click
+  figma.commitUndo();
+
   // Always re-enable UI
-  figma.ui.postMessage({ type: "done" });
+  post({ type: "done" });
 };

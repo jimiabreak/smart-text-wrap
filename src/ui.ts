@@ -1,66 +1,70 @@
-const balanceCard = document.getElementById("balanceCard") as HTMLDivElement;
-const prettyCard = document.getElementById("prettyCard") as HTMLDivElement;
+import type { Action, ToastVariant, UiMessage } from "./messages";
+
+const balanceCard = document.getElementById("balanceCard") as HTMLButtonElement;
+const prettyCard = document.getElementById("prettyCard") as HTMLButtonElement;
 const resetBtn = document.getElementById("resetBtn") as HTMLButtonElement;
 const toastEl = document.getElementById("toast") as HTMLDivElement;
 
+const controls = [balanceCard, prettyCard, resetBtn];
+
+/** How long a toast stays up. Errors stay until the next action. */
+const TOAST_MS: Record<ToastVariant, number | null> = {
+  success: 5000,
+  info: 5000,
+  error: null,
+};
+
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let isBusy = false;
 
-function showToast(message: string, variant: "success" | "error"): void {
-  toastEl.textContent = message;
-  toastEl.className = `toast toast-${variant} toast-visible`;
-
+function hideToast(): void {
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toastEl.classList.remove("toast-visible");
-  }, 3000);
+  toastTimer = null;
+  toastEl.classList.remove("toast-visible");
 }
 
-function setDisabled(disabled: boolean): void {
-  isDisabled = disabled;
-  balanceCard.classList.toggle("disabled", disabled);
-  prettyCard.classList.toggle("disabled", disabled);
-  resetBtn.classList.toggle("disabled", disabled);
-  balanceCard.setAttribute("tabindex", disabled ? "-1" : "0");
-  prettyCard.setAttribute("tabindex", disabled ? "-1" : "0");
-  resetBtn.disabled = disabled;
+function showToast(message: string, variant: ToastVariant): void {
+  hideToast();
+  // Empty the region first so a repeated message is announced again
+  toastEl.textContent = "";
+  toastEl.className = `toast toast-${variant}`;
+  requestAnimationFrame(() => {
+    toastEl.textContent = message;
+    toastEl.classList.add("toast-visible");
+  });
+
+  const duration = TOAST_MS[variant];
+  if (duration !== null) toastTimer = setTimeout(hideToast, duration);
 }
 
-let isDisabled = false;
+/** aria-disabled keeps focus on the pressed control; native `disabled` would drop it to <body>. */
+function setBusy(busy: boolean): void {
+  isBusy = busy;
+  for (const control of controls) {
+    if (busy) control.setAttribute("aria-disabled", "true");
+    else control.removeAttribute("aria-disabled");
+  }
+}
 
-function handleAction(type: string): void {
-  if (isDisabled) return;
-  setDisabled(true);
+function handleAction(type: Action): void {
+  if (isBusy) return;
+  hideToast();
+  setBusy(true);
   parent.postMessage({ pluginMessage: { type } }, "*");
 }
 
-function onKeyActivate(e: KeyboardEvent, type: string): void {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    handleAction(type);
-  }
-}
-
 balanceCard.addEventListener("click", () => handleAction("balance"));
-balanceCard.addEventListener("keydown", (e) => onKeyActivate(e, "balance"));
-
 prettyCard.addEventListener("click", () => handleAction("pretty"));
-prettyCard.addEventListener("keydown", (e) => onKeyActivate(e, "pretty"));
-
 resetBtn.addEventListener("click", () => handleAction("reset"));
 
 window.onmessage = (event: MessageEvent) => {
-  const msg = event.data.pluginMessage;
+  const msg = event.data.pluginMessage as UiMessage | undefined;
   if (!msg) return;
 
-  if (msg.type === "success") {
-    showToast(msg.message, "success");
-  }
-
-  if (msg.type === "error") {
-    showToast(msg.message, "error");
-  }
-
   if (msg.type === "done") {
-    setDisabled(false);
+    setBusy(false);
+    return;
   }
+
+  showToast(msg.message, msg.type);
 };
