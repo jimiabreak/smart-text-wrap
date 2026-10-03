@@ -1,40 +1,51 @@
 const NBSP = "\u00A0";
 
+/**
+ * Replace the character at `index` with `char`. Callers only ever replace a
+ * regular space, so the length of the text never changes.
+ */
+function replaceAt(text: string, index: number, char: string): string {
+  return text.slice(0, index) + char + text.slice(index + 1);
+}
+
+/** [start, end) of `line` without its leading and trailing whitespace. */
+function contentBounds(line: string): [number, number] {
+  const start = line.length - line.replace(/^\s+/, "").length;
+  const end = line.replace(/\s+$/, "").length;
+  return [start, end];
+}
+
+/** Indices of the regular spaces between words, ignoring leading and trailing whitespace. */
+function innerSpaces(line: string): number[] {
+  const [start, end] = contentBounds(line);
+  const spaces: number[] = [];
+  for (let i = start; i < end; i++) {
+    if (line[i] === " ") spaces.push(i);
+  }
+  return spaces;
+}
+
 function applyPrettyToLine(line: string): string {
-  const trimmed = line.trim();
-  if (!trimmed.includes(" ")) return line;
+  const spaces = innerSpaces(line);
+  if (spaces.length === 0) return line;
 
-  // Already fixed — last space before final word is already NBSP
-  const lastSpaceIdx = trimmed.lastIndexOf(" ");
-  if (lastSpaceIdx === -1) return line;
+  const last = spaces[spaces.length - 1];
 
-  const beforeLast = trimmed.slice(0, lastSpaceIdx);
-  const lastWord = trimmed.slice(lastSpaceIdx + 1);
+  // Already fixed — the final words are already joined by an NBSP
+  if (line.lastIndexOf(NBSP) > last) return line;
 
-  // Check if already has NBSP before last word
-  const lastNbspIdx = trimmed.lastIndexOf(NBSP);
-  if (lastNbspIdx > beforeLast.lastIndexOf(" ")) return line;
-
-  // If last two words combined > 20 chars, join last three
-  const secondLastSpaceIdx = beforeLast.lastIndexOf(" ");
-  if (secondLastSpaceIdx !== -1) {
-    const secondLastWord = beforeLast.slice(secondLastSpaceIdx + 1);
+  // If the last two words combined are > 20 chars, join the last three
+  if (spaces.length >= 2) {
+    const secondLast = spaces[spaces.length - 2];
+    const [, end] = contentBounds(line);
+    const secondLastWord = line.slice(secondLast + 1, last);
+    const lastWord = line.slice(last + 1, end);
     if ((secondLastWord + lastWord).length > 20) {
-      // Join all three last words with NBSP
-      const threeWordTail = secondLastWord + NBSP + lastWord;
-      const beforeThree = beforeLast.slice(0, secondLastSpaceIdx);
-      const thirdLastSpaceIdx = beforeThree.lastIndexOf(" ");
-      if (thirdLastSpaceIdx !== -1) {
-        const thirdLastWord = beforeThree.slice(thirdLastSpaceIdx + 1);
-        const prefix = beforeThree.slice(0, thirdLastSpaceIdx);
-        return prefix + NBSP + thirdLastWord + NBSP + threeWordTail;
-      }
-      // Only three words total
-      return beforeThree + NBSP + threeWordTail;
+      return replaceAt(replaceAt(line, secondLast, NBSP), last, NBSP);
     }
   }
 
-  return beforeLast + NBSP + lastWord;
+  return replaceAt(line, last, NBSP);
 }
 
 export function applyPretty(text: string): string {
@@ -42,32 +53,22 @@ export function applyPretty(text: string): string {
 }
 
 function balanceLine(line: string): string {
-  const trimmed = line.trim();
-  if (!trimmed.includes(" ")) return line;
+  const spaces = innerSpaces(line);
+  if (spaces.length === 0) return line;
 
-  const midpoint = trimmed.length / 2;
-  let bestIdx = -1;
+  const [start, end] = contentBounds(line);
+  const midpoint = start + (end - start) / 2;
 
-  // Find the first space at or after the midpoint
-  for (let i = Math.ceil(midpoint); i < trimmed.length; i++) {
-    if (trimmed[i] === " ") {
-      bestIdx = i;
+  // First space at or after the midpoint, else the last space before it
+  let split = spaces[spaces.length - 1];
+  for (const i of spaces) {
+    if (i >= Math.ceil(midpoint)) {
+      split = i;
       break;
     }
   }
 
-  // Fall back to the last space before the midpoint
-  if (bestIdx === -1) {
-    for (let i = Math.floor(midpoint); i >= 0; i--) {
-      if (trimmed[i] === " ") {
-        bestIdx = i;
-        break;
-      }
-    }
-  }
-
-  if (bestIdx === -1) return line;
-  return trimmed.slice(0, bestIdx) + "\n" + trimmed.slice(bestIdx + 1);
+  return replaceAt(line, split, "\n");
 }
 
 export function applyBalance(text: string): string {
@@ -88,4 +89,3 @@ export function shouldSkip(text: string, textAutoResize: string): boolean {
 
   return false;
 }
-

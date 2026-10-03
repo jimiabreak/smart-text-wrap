@@ -14,7 +14,7 @@ describe("applyPretty", () => {
 
   it("joins last three words if last two combined exceed 20 chars", () => {
     expect(applyPretty("This is a extraordinarily sophisticated")).toBe(
-      "This is\u00A0a\u00A0extraordinarily\u00A0sophisticated"
+      "This is a\u00A0extraordinarily\u00A0sophisticated"
     );
   });
 
@@ -35,6 +35,15 @@ describe("applyPretty", () => {
   it("returns two-word text with non-breaking space", () => {
     expect(applyPretty("Hello world")).toBe("Hello\u00A0world");
   });
+
+  it("keeps leading and trailing whitespace", () => {
+    expect(applyPretty("  indented line here  ")).toBe("  indented line\u00A0here  ");
+  });
+
+  it("never changes the length of the text", () => {
+    const text = "  The quick brown fox\nThis is a extraordinarily sophisticated  ";
+    expect(applyPretty(text)).toHaveLength(text.length);
+  });
 });
 
 describe("applyBalance", () => {
@@ -53,6 +62,12 @@ describe("applyBalance", () => {
 
   it("picks the split closest to the midpoint", () => {
     expect(applyBalance("A BB CCCCCCCC")).toBe("A BB\nCCCCCCCC");
+  });
+
+  it("keeps leading whitespace and the length of the text", () => {
+    const text = "   indented heading text";
+    expect(applyBalance(text)).toBe("   indented heading\ntext");
+    expect(applyBalance(text)).toHaveLength(text.length);
   });
 
   it("handles multi-paragraph text — balances each paragraph independently", () => {
