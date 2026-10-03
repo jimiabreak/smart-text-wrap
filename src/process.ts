@@ -82,11 +82,14 @@ function sourceText(node: TextNodeLike): string {
   return applied ? withoutPluginSwaps(original, applied, node.characters) : node.characters;
 }
 
-/** True when the layer shows an unedited Pretty result: Pretty never adds line breaks, Balance always does. */
-function showsPretty(node: TextNodeLike): boolean {
-  if (!isUnedited(node)) return false;
+/**
+ * True when the plugin's last write to this layer was Pretty, edited since or
+ * not: Pretty never adds line breaks, Balance always does.
+ */
+function lastWriteWasPretty(node: TextNodeLike): boolean {
   const original = node.getPluginData(ORIGINAL_KEY);
   const applied = node.getPluginData(APPLIED_KEY);
+  if (!original || !applied) return false;
   return applied.split("\n").length === original.split("\n").length;
 }
 
@@ -182,7 +185,7 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
         result.skippedEdited++;
         continue;
       }
-      const keepsPretty = mode === "balance" && showsPretty(node);
+      const keepsPretty = mode === "balance" && lastWriteWasPretty(node);
       try {
         const target = mode === "pretty" ? applyPretty(source) : balance(node, source, deps);
         if (keepsPretty && target === source) {

@@ -322,6 +322,16 @@ describe("wrapNodes — Balance", () => {
     expect(node.getPluginData("appliedText")).toBe(pretty);
   });
 
+  it("keeps an edited Pretty result when there is nothing to balance", async () => {
+    const node = makeNode("First paragraph is here\nSecond paragraph is here");
+    await wrapNodes([node], "pretty", depsAt(40));
+    node.characters = node.characters.replace("First", "Fixed");
+    const edited = node.characters;
+    const result = await wrapNodes([node], "balance", depsAt(40));
+    expect(node.characters).toBe(edited);
+    expect(result.changed).toBe(0);
+  });
+
   it("keeps a Pretty result on text longer than six lines", async () => {
     const node = makeNode("one two three four five six seven eight nine ten eleven twelve");
     await wrapNodes([node], "pretty", depsAt(6));
