@@ -1,10 +1,12 @@
-import { applyPretty, applyBalance, shouldSkip, resetText } from "./algorithm";
 import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
+import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps, type WrapMode } from "./process";
 
 figma.showUI(__html__, { width: 280, height: 380, themeColors: true });
 
-type WrapMode = "balance" | "pretty";
+const deps: WrapDeps = {
+  loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
+};
 
 async function processSelection(mode: WrapMode): Promise<number> {
   const selection = figma.currentPage.selection;
@@ -21,41 +23,8 @@ async function processSelection(mode: WrapMode): Promise<number> {
     return 0;
   }
 
-  let fixedCount = 0;
-
-  for (const node of textNodes) {
-    try {
-      await loadFontsForNode(node);
-
-      // Always work from original text to prevent double-application
-      const stored = node.getPluginData("originalText");
-      const currentText = node.characters;
-      const sourceText = stored || currentText;
-
-      if (shouldSkip(sourceText, node.textAutoResize)) continue;
-
-      // Store original before first modification
-      if (!stored) {
-        node.setPluginData("originalText", currentText);
-      }
-
-      // Restore to original first if previously modified
-      if (stored && stored !== currentText) {
-        node.characters = stored;
-      }
-
-      const fixed = mode === "pretty" ? applyPretty(sourceText) : applyBalance(sourceText);
-
-      if (fixed !== sourceText) {
-        node.characters = fixed;
-        fixedCount++;
-      }
-    } catch (e) {
-      console.error("Failed to process node:", node.name, e);
-    }
-  }
-
-  return fixedCount;
+  const result = await wrapNodes(textNodes, mode, deps);
+  return result.changed;
 }
 
 async function resetSelection(): Promise<number> {
@@ -67,26 +36,8 @@ async function resetSelection(): Promise<number> {
   }
 
   const textNodes = findTextNodes(selection) as TextNode[];
-  let resetCount = 0;
-
-  for (const node of textNodes) {
-    try {
-      const original = node.getPluginData("originalText");
-      const text = node.characters;
-      const restored = resetText(text, original || undefined);
-
-      if (restored !== text) {
-        await loadFontsForNode(node);
-        node.characters = restored;
-        node.setPluginData("originalText", "");
-        resetCount++;
-      }
-    } catch (e) {
-      console.error("Failed to reset node:", node.name, e);
-    }
-  }
-
-  return resetCount;
+  const result = await resetNodes(textNodes, deps);
+  return result.changed;
 }
 
 figma.ui.onmessage = async (msg: { type: string }) => {
