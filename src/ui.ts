@@ -5,7 +5,7 @@ const toastEl = document.getElementById("toast") as HTMLDivElement;
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-function showToast(message: string, variant: "success" | "error"): void {
+function showToast(message: string, variant: "success" | "info" | "error"): void {
   toastEl.textContent = message;
   toastEl.className = `toast toast-${variant} toast-visible`;
 
@@ -54,6 +54,10 @@ window.onmessage = (event: MessageEvent) => {
 
   if (msg.type === "success") {
     showToast(msg.message, "success");
+  }
+
+  if (msg.type === "info") {
+    showToast(msg.message, "info");
   }
 
   if (msg.type === "error") {
