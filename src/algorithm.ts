@@ -1,14 +1,5 @@
 const NBSP = "\u00A0";
 
-/**
- * If an original is stored, return it directly.
- * Otherwise, strip NBSP characters back to regular spaces.
- */
-export function resetText(text: string, original?: string): string {
-  if (original) return original;
-  return text.replace(/\u00A0/g, " ");
-}
-
 function applyPrettyToLine(line: string): string {
   const trimmed = line.trim();
   if (!trimmed.includes(" ")) return line;

@@ -65,15 +65,50 @@ describe("wrapNodes", () => {
     expect(result.changed).toBe(0);
     expect(node.characters).toBe("Hello beautiful world");
   });
+
+  it("reports no change when the same mode is applied twice", async () => {
+    const node = makeNode("The quick brown fox jumps over the lazy dog");
+    await wrapNodes([node], "pretty", deps);
+    const second = await wrapNodes([node], "pretty", deps);
+    expect(second.changed).toBe(0);
+    expect(node.characters).toBe(`The quick brown fox jumps over the lazy${NBSP}dog`);
+  });
+
+  it("keeps text the designer edited after wrapping when wrapping again", async () => {
+    const node = makeNode("The quick brown fox jumps over the lazy dog");
+    await wrapNodes([node], "pretty", deps);
+    node.characters = "A completely rewritten paragraph by the designer";
+    await wrapNodes([node], "pretty", deps);
+    expect(node.characters).toBe(`A completely rewritten paragraph by the${NBSP}designer`);
+    expect(node.getPluginData("originalText")).toBe("A completely rewritten paragraph by the designer");
+  });
 });
 
 describe("resetNodes", () => {
-  it("restores the original text and clears the stored original", async () => {
+  it("restores the original text and clears the stored data", async () => {
     const node = makeNode("The quick brown fox jumps over the lazy dog");
     await wrapNodes([node], "balance", deps);
     const result = await resetNodes([node], deps);
     expect(node.characters).toBe("The quick brown fox jumps over the lazy dog");
     expect(result.changed).toBe(1);
     expect(node.getPluginData("originalText")).toBe("");
+    expect(node.getPluginData("appliedText")).toBe("");
+  });
+
+  it("keeps text the designer edited after wrapping", async () => {
+    const node = makeNode("Welcome to our product");
+    await wrapNodes([node], "pretty", deps);
+    node.characters = "Welcome to our new product";
+    const result = await resetNodes([node], deps);
+    expect(node.characters).toBe("Welcome to our new product");
+    expect(result.skippedEdited).toBe(1);
+    expect(result.changed).toBe(0);
+  });
+
+  it("leaves layers the plugin never touched alone, including their NBSPs", async () => {
+    const node = makeNode(`Set in 16${NBSP}px type`);
+    const result = await resetNodes([node], deps);
+    expect(node.characters).toBe(`Set in 16${NBSP}px type`);
+    expect(result.changed).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyPretty, applyBalance, shouldSkip, resetText } from "../src/algorithm";
+import { applyPretty, applyBalance, shouldSkip } from "../src/algorithm";
 
 describe("applyPretty", () => {
   it("joins the last two words with a non-breaking space", () => {
@@ -94,33 +94,5 @@ describe("shouldSkip", () => {
 
   it("does not skip text with TRUNCATE (fixed width)", () => {
     expect(shouldSkip("Hello beautiful world", "TRUNCATE")).toBe(false);
-  });
-});
-
-describe("resetText", () => {
-  it("replaces non-breaking spaces with regular spaces", () => {
-    expect(resetText("Hello\u00A0world")).toBe("Hello world");
-  });
-
-  it("handles multiple non-breaking spaces", () => {
-    expect(resetText("one\u00A0two\u00A0three")).toBe("one two three");
-  });
-
-  it("removes newlines inserted by balance (restores from original)", () => {
-    expect(resetText("The quick brown\nfox jumps", "The quick brown fox jumps")).toBe(
-      "The quick brown fox jumps"
-    );
-  });
-
-  it("returns original text when provided", () => {
-    expect(resetText("modified\u00A0text", "original text here")).toBe("original text here");
-  });
-
-  it("strips NBSP when no original provided", () => {
-    expect(resetText("Hello\u00A0beautiful\u00A0world")).toBe("Hello beautiful world");
-  });
-
-  it("returns unchanged text if no NBSP and no original", () => {
-    expect(resetText("Hello world")).toBe("Hello world");
   });
 });
