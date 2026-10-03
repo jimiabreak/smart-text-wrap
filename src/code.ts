@@ -11,7 +11,7 @@ import {
   type UiMessage,
 } from "./messages";
 
-figma.showUI(__html__, { width: 280, height: 380, themeColors: true });
+figma.showUI(__html__, { width: 280, height: 460, themeColors: true });
 
 function post(message: UiMessage): void {
   figma.ui.postMessage(message);
