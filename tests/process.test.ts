@@ -14,16 +14,36 @@ function makeNode(text: string, opts: { textAutoResize?: string; hasMissingFont?
   const data: Record<string, string> = {};
   let chars = text;
   let styles = opts.styles ?? text.split("").map(() => "regular");
-  return {
-    name: "Text",
-    textAutoResize: opts.textAutoResize ?? "HEIGHT",
-    hasMissingFont: opts.hasMissingFont ?? false,
+  let textAutoResize = opts.textAutoResize ?? "HEIGHT";
+  let hasMissingFont = opts.hasMissingFont ?? false;
+  // Like Figma, a deleted layer throws on every property and method except `removed`
+  const alive = () => {
+    if (node.removed) throw new Error("The node with id 1:1 does not exist");
+  };
+  const node = {
     removed: false,
     /** Number of character edits the plugin made through insertCharacters. */
     writes: 0,
+    get name() {
+      alive();
+      return "Text";
+    },
+    get textAutoResize() {
+      alive();
+      return textAutoResize;
+    },
+    set textAutoResize(value: string) {
+      textAutoResize = value;
+    },
+    get hasMissingFont() {
+      alive();
+      return hasMissingFont;
+    },
+    set hasMissingFont(value: boolean) {
+      hasMissingFont = value;
+    },
     get characters() {
-      // Like Figma, a deleted layer throws on any property read except `removed`
-      if (this.removed) throw new Error("The node with id 1:1 does not exist");
+      alive();
       return chars;
     },
     set characters(value: string) {
@@ -33,21 +53,28 @@ function makeNode(text: string, opts: { textAutoResize?: string; hasMissingFont?
     get styles() {
       return styles;
     },
-    getPluginData: (key: string) => data[key] ?? "",
+    getPluginData: (key: string) => {
+      alive();
+      return data[key] ?? "";
+    },
     setPluginData: (key: string, value: string) => {
+      alive();
       data[key] = value;
     },
     insertCharacters(start: number, inserted: string, useStyle: "BEFORE" | "AFTER" = "BEFORE") {
-      this.writes++;
+      alive();
+      node.writes++;
       const copied = useStyle === "BEFORE" ? (styles[start - 1] ?? styles[start]) : (styles[start] ?? styles[start - 1]);
       chars = chars.slice(0, start) + inserted + chars.slice(start);
       styles = [...styles.slice(0, start), ...inserted.split("").map(() => copied), ...styles.slice(start)];
     },
     deleteCharacters(start: number, end: number) {
+      alive();
       chars = chars.slice(0, start) + chars.slice(end);
       styles = [...styles.slice(0, start), ...styles.slice(end)];
     },
   };
+  return node;
 }
 
 /** "Hello beautiful world" with "beautiful" in bold. */
@@ -78,7 +105,8 @@ function wrapCount(text: string, width: number): number {
 function depsAt(width: number): WrapDeps {
   return {
     loadFonts: async () => {},
-    measure: (_node: TextNodeLike, text: string) => ({ lines: wrapCount(text, width), height: wrapCount(text, width) }),
+    measureLines: (_node: TextNodeLike, text: string) => ({ lines: wrapCount(text, width), height: wrapCount(text, width) }),
+    measureHeight: (_node: TextNodeLike, text: string) => wrapCount(text, width),
   };
 }
 
@@ -328,15 +356,21 @@ describe("wrapNodes — Balance", () => {
     expect(node.getPluginData("originalText")).toBe("");
   });
 
-  it("rejects a taller result even when line counts of broken text are unreliable", async () => {
-    // Figma's one-line pass can't count lines once "\n" is present; only the height may judge the result
+  it("only asks for line counts of text without line breaks", async () => {
+    // Figma's one-line pass can't count lines once a break is present
+    const asked: string[] = [];
     const deps: WrapDeps = {
-      ...depsAt(10),
-      measure: (_node: TextNodeLike, text: string) => ({ lines: text.includes("\n") ? 1 : wrapCount(text, 10), height: wrapCount(text, 10) }),
+      ...depsAt(15),
+      measureLines: (_node: TextNodeLike, text: string) => {
+        asked.push(text);
+        return { lines: wrapCount(text, 15), height: wrapCount(text, 15) };
+      },
     };
-    const node = makeNode("aaaaaaaaa b cccccccc");
-    await wrapNodes([node], "balance", deps);
-    expect(node.characters).toBe("aaaaaaaaa b cccccccc");
+    const nodes = [makeNode("Welcome to our product"), makeNode("aaaaaaaaa b cccccccc"), makeNode("The quick brown fox jumps")];
+    await wrapNodes(nodes, "balance", deps);
+    await wrapNodes(nodes, "balance", deps);
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.some((text) => /[\n\u2028]/.test(text))).toBe(false);
   });
 
   it("puts the text back when measuring fails", async () => {
@@ -344,7 +378,7 @@ describe("wrapNodes — Balance", () => {
     await wrapNodes([node], "balance", depsAt(20));
     const failing: WrapDeps = {
       ...depsAt(20),
-      measure: () => {
+      measureLines: () => {
         throw new Error("clone failed");
       },
     };
@@ -459,6 +493,19 @@ describe("resetNodes", () => {
     const result = await resetNodes([node], changing);
     expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1 });
     expect(node.characters).toBe(`Hello beautiful${NBSP}world`);
+  });
+
+  it("quietly skips resetting a layer deleted before its turn", async () => {
+    const first = makeNode("Hello beautiful world");
+    const second = makeNode("Another lovely sentence");
+    await wrapNodes([first, second], "pretty", deps);
+    const deleting = {
+      loadFonts: async (node: TextNodeLike) => {
+        if (node === first) second.removed = true;
+      },
+    };
+    const result = await resetNodes([first, second], deleting);
+    expect(result).toEqual({ changed: 1, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 });
   });
 
   it("skips resetting layers with missing fonts", async () => {

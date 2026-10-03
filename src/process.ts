@@ -16,11 +16,10 @@ export interface TextNodeLike extends EditableText {
 
 export interface WrapDeps {
   loadFonts(node: TextNodeLike): Promise<void>;
-  /**
-   * Lay `text` out at the node's width without touching the node: its height,
-   * and its line count (only meaningful for text without line breaks).
-   */
-  measure(node: TextNodeLike, text: string): { lines: number; height: number };
+  /** Line count and height of `text`, which has no line breaks, at the node's width, without touching the node. */
+  measureLines(node: TextNodeLike, text: string): { lines: number; height: number };
+  /** Height of `text` at the node's width, line breaks included, without touching the node. */
+  measureHeight(node: TextNodeLike, text: string): number;
 }
 
 export interface ProcessResult {
@@ -135,10 +134,10 @@ function restore(node: TextNodeLike, before: ReturnType<typeof snapshot>): void 
  */
 function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
   if (hasLineBreak(source)) return source;
-  const { lines, height } = deps.measure(node, source);
+  const { lines, height } = deps.measureLines(node, source);
   const target = balanceToLines(source, lines);
   if (target === source) return source;
-  return deps.measure(node, target).height <= height ? target : source;
+  return deps.measureHeight(node, target) <= height ? target : source;
 }
 
 /**
@@ -199,6 +198,8 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
       }
       if (node.characters !== before.text) result.changed++;
     } catch (e) {
+      // Deleted mid-action: nothing to report, and Figma throws on every property but `removed`
+      if (node.removed) continue;
       console.error("Failed to process node:", node.name, e);
       result.failed++;
     }
@@ -247,6 +248,8 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
       }
       result.changed++;
     } catch (e) {
+      // Deleted mid-action: nothing to report, and Figma throws on every property but `removed`
+      if (node.removed) continue;
       console.error("Failed to reset node:", node.name, e);
       result.failed++;
     }

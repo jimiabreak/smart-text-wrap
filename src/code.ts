@@ -1,6 +1,6 @@
 import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
-import { measureText } from "./measure";
+import { measureHeight, measureLines } from "./measure";
 import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps } from "./process";
 import {
   describeResult,
@@ -22,7 +22,8 @@ function post(message: UiMessage): void {
 
 const deps: WrapDeps = {
   loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
-  measure: (node: TextNodeLike, text: string) => measureText(node as TextNode, text),
+  measureLines: (node: TextNodeLike, text: string) => measureLines(node as TextNode, text),
+  measureHeight: (node: TextNodeLike, text: string) => measureHeight(node as TextNode, text),
 };
 
 async function run(action: Action): Promise<void> {
@@ -44,8 +45,10 @@ async function run(action: Action): Promise<void> {
   post(describeResult(action, result));
 }
 
-// Messages come from the panel's iframe, so check them at runtime too
+// Messages come from the panel's iframe, so check their shape at runtime too
 figma.ui.onmessage = async (msg: PluginRequest) => {
+  if (!msg || typeof msg !== "object") return;
+
   if (msg.type === "resize") {
     if (Number.isFinite(msg.height)) {
       figma.ui.resize(WINDOW_SIZE.width, Math.min(Math.max(Math.round(msg.height), WINDOW_SIZE.height), WINDOW_SIZE.maxHeight));

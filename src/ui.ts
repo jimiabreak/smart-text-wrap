@@ -14,9 +14,6 @@ const TOAST_MS: Record<ToastVariant, number | null> = {
   error: null,
 };
 
-/** How long a hidden toast takes to fade out (its 200ms transition, plus a margin). */
-const TOAST_FADE_MS = 250;
-
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let toastFrame: number | null = null;
 let shrinkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -38,6 +35,20 @@ function fitWindow(): void {
   send({ type: "resize", height });
 }
 
+/** Shrink the window back once a timed-out toast has finished fading (its CSS transition; none under reduced motion). */
+function shrinkAfterFade(): void {
+  const seconds = Math.max(0, ...getComputedStyle(toastEl).transitionDuration.split(",").map(parseFloat)) || 0;
+  if (shrinkTimer) clearTimeout(shrinkTimer);
+  shrinkTimer = setTimeout(() => {
+    shrinkTimer = null;
+    fitWindow();
+  }, seconds * 1000);
+}
+
+/**
+ * Hide the toast. The window keeps its size: during an action the result
+ * toast arrives soon and resizes it once, so it never shrinks and regrows.
+ */
 function hideToast(): void {
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = null;
@@ -45,12 +56,6 @@ function hideToast(): void {
   if (toastFrame !== null) cancelAnimationFrame(toastFrame);
   toastFrame = null;
   toastEl.classList.remove("toast-visible");
-  // Shrink once the toast has faded out; a toast that replaces it first cancels this
-  if (shrinkTimer) clearTimeout(shrinkTimer);
-  shrinkTimer = setTimeout(() => {
-    shrinkTimer = null;
-    fitWindow();
-  }, TOAST_FADE_MS);
 }
 
 function showToast(message: string, variant: ToastVariant): void {
@@ -68,7 +73,12 @@ function showToast(message: string, variant: ToastVariant): void {
   });
 
   const duration = TOAST_MS[variant];
-  if (duration !== null) toastTimer = setTimeout(hideToast, duration);
+  if (duration !== null) {
+    toastTimer = setTimeout(() => {
+      hideToast();
+      shrinkAfterFade();
+    }, duration);
+  }
 }
 
 /** aria-disabled keeps focus on the pressed control; native `disabled` would drop it to <body>. */
