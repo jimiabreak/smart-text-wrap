@@ -107,6 +107,7 @@ function depsAt(width: number): WrapDeps {
     loadFonts: async () => {},
     measureLines: (_node: TextNodeLike, text: string) => ({ lines: wrapCount(text, width), height: wrapCount(text, width) }),
     measureHeight: (_node: TextNodeLike, text: string) => wrapCount(text, width),
+    hasParagraphFormatting: () => false,
   };
 }
 
@@ -438,6 +439,13 @@ describe("wrapNodes — Balance", () => {
     const node = makeNode("Smart Text Wrap\u2028prevents orphans and balances text");
     const result = await wrapNodes([node], "balance", depsAt(10));
     expect(node.characters).toBe("Smart Text Wrap\u2028prevents orphans and balances text");
+    expect(result.changed).toBe(0);
+  });
+
+  it("leaves list items and indented paragraphs alone", async () => {
+    const node = makeNode("The quick brown fox jumps");
+    const result = await wrapNodes([node], "balance", { ...depsAt(20), hasParagraphFormatting: () => true });
+    expect(node.characters).toBe("The quick brown fox jumps");
     expect(result.changed).toBe(0);
   });
 

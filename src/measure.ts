@@ -41,3 +41,14 @@ export function measureLines(node: TextNode, text: string): { lines: number; hei
 export function measureHeight(node: TextNode, text: string): number {
   return withProbe(node, text, (probe) => probe.height);
 }
+
+/**
+ * True when each new paragraph would add a bullet, number or indent. Balance
+ * breaks lines with "\n", which starts a new paragraph in Figma, so it must
+ * leave such text alone.
+ */
+export function hasParagraphFormatting(node: TextNode): boolean {
+  if (node.paragraphIndent > 0) return true;
+  const list = node.getRangeListOptions(0, node.characters.length);
+  return list === figma.mixed || list.type !== "NONE";
+}

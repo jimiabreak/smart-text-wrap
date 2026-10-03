@@ -20,6 +20,8 @@ export interface WrapDeps {
   measureLines(node: TextNodeLike, text: string): { lines: number; height: number };
   /** Height of `text` at the node's width, line breaks included, without touching the node. */
   measureHeight(node: TextNodeLike, text: string): number;
+  /** True when each new paragraph would add a bullet, number or indent, so a "\n" break changes more than the line. */
+  hasParagraphFormatting(node: TextNodeLike): boolean;
 }
 
 export interface ProcessResult {
@@ -133,7 +135,7 @@ function restore(node: TextNodeLike, before: ReturnType<typeof snapshot>): void 
  * layer doesn't get taller. Measures copies, so the layer itself is never touched.
  */
 function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
-  if (hasLineBreak(source)) return source;
+  if (hasLineBreak(source) || deps.hasParagraphFormatting(node)) return source;
   const { lines, height } = deps.measureLines(node, source);
   const target = balanceToLines(source, lines);
   if (target === source) return source;

@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { measureHeight, measureLines } from "../src/measure";
+import { describe, it, expect, vi } from "vitest";
+import { hasParagraphFormatting, measureHeight, measureLines } from "../src/measure";
+
+const MIXED = Symbol("mixed");
+vi.stubGlobal("figma", { mixed: MIXED });
 
 const LINE = 20;
 /** With vertical trim ("CAP_HEIGHT"), the first line is only cap-height tall. */
@@ -140,5 +143,24 @@ describe("probes", () => {
     const { layer, probes } = makeLayer("Hello world", 30);
     expect(() => measureHeight(layer, "Hello")).toThrow(/length would change/);
     expect(probes[0].removed).toBe(true);
+  });
+});
+
+describe("hasParagraphFormatting", () => {
+  const layer = (paragraphIndent: number, list: unknown) =>
+    ({ characters: "Hello world", paragraphIndent, getRangeListOptions: () => list }) as any;
+
+  it("is false for plain paragraphs", () => {
+    expect(hasParagraphFormatting(layer(0, { type: "NONE" }))).toBe(false);
+  });
+
+  it("is true for bulleted, numbered or mixed lists", () => {
+    expect(hasParagraphFormatting(layer(0, { type: "UNORDERED" }))).toBe(true);
+    expect(hasParagraphFormatting(layer(0, { type: "ORDERED" }))).toBe(true);
+    expect(hasParagraphFormatting(layer(0, MIXED))).toBe(true);
+  });
+
+  it("is true for an indented paragraph", () => {
+    expect(hasParagraphFormatting(layer(12, { type: "NONE" }))).toBe(true);
   });
 });

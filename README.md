@@ -50,7 +50,7 @@ Select any text layer, frame, component or instance, then pick an action. Smart 
 - Balance works on text without line breaks of its own (Return or Shift+Return), up to 6 lines, like browsers do for `text-wrap: balance`.
 - Auto-width text layers never wrap, so both actions skip them.
 - Text set in a font that isn't installed is skipped. Install or replace the font, then run the action again.
-- Balance breaks lines with a regular line break. If your text style adds paragraph spacing, that would make the text taller, so Balance leaves it alone.
+- Balance breaks lines with a paragraph break (Return). Text with paragraph spacing would get taller, and bullets, numbering or a paragraph indent would repeat on every line, so Balance leaves such text alone.
 
 ## Quick Start
 

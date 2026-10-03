@@ -1,6 +1,6 @@
 import { findTextNodes } from "./traversal";
 import { loadFontsForNode } from "./fonts";
-import { measureHeight, measureLines } from "./measure";
+import { hasParagraphFormatting, measureHeight, measureLines } from "./measure";
 import { wrapNodes, resetNodes, type TextNodeLike, type WrapDeps } from "./process";
 import {
   describeResult,
@@ -24,6 +24,7 @@ const deps: WrapDeps = {
   loadFonts: (node: TextNodeLike) => loadFontsForNode(node as TextNode),
   measureLines: (node: TextNodeLike, text: string) => measureLines(node as TextNode, text),
   measureHeight: (node: TextNodeLike, text: string) => measureHeight(node as TextNode, text),
+  hasParagraphFormatting: (node: TextNodeLike) => hasParagraphFormatting(node as TextNode),
 };
 
 async function run(action: Action): Promise<void> {
@@ -56,8 +57,11 @@ figma.ui.onmessage = async (msg: PluginRequest) => {
     return;
   }
 
+  // Anything else is not from the panel: ignore it, so it can't end a running action early
+  if (!isAction(msg.type)) return;
+
   try {
-    if (isAction(msg.type)) await run(msg.type);
+    await run(msg.type);
   } catch (e) {
     console.error("Plugin error:", e);
     post({ type: "error", message: UNEXPECTED_ERROR });
