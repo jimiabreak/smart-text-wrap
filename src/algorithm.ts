@@ -30,14 +30,14 @@ function applyPrettyToLine(line: string): string {
   if (spaces.length === 0) return line;
 
   const last = spaces[spaces.length - 1];
+  const [, end] = contentBounds(line);
 
-  // Already fixed — the final words are already joined by an NBSP
-  if (line.lastIndexOf(NBSP) > last) return line;
+  // Already fixed — the final words are already joined by an NBSP (trailing whitespace doesn't count)
+  if (line.lastIndexOf(NBSP, end - 1) > last) return line;
 
   // If the last two words combined are > 20 chars, join the last three
   if (spaces.length >= 2) {
     const secondLast = spaces[spaces.length - 2];
-    const [, end] = contentBounds(line);
     const secondLastWord = line.slice(secondLast + 1, last);
     const lastWord = line.slice(last + 1, end);
     if ((secondLastWord + lastWord).length > 20) {

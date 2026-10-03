@@ -13,6 +13,8 @@ export function countLines(node: TextNode): number {
   const probe = node.clone();
   try {
     probe.textTruncation = "DISABLED";
+    // Vertical trim makes one line shorter than every other line, which skews the ratio
+    probe.leadingTrim = "NONE";
     probe.textAutoResize = "HEIGHT";
     const wrappedHeight = probe.height;
     probe.textAutoResize = "WIDTH_AND_HEIGHT";

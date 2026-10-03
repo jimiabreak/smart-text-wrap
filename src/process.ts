@@ -43,12 +43,51 @@ function isUnedited(node: TextNodeLike): boolean {
 }
 
 /**
+ * The edited text with the plugin's own earlier swaps (the NBSPs and line
+ * breaks it inserted) turned back into spaces, but only outside the span the
+ * designer changed, so the edit is kept exactly as typed. `original` and
+ * `applied` are the stored texts from the plugin's last write.
+ */
+function withoutPluginSwaps(original: string, applied: string, current: string): string {
+  if (original.length !== applied.length) return current;
+
+  // The edited span lies between the longest common prefix and suffix of applied and current
+  const shorter = Math.min(applied.length, current.length);
+  let prefix = 0;
+  while (prefix < shorter && applied[prefix] === current[prefix]) prefix++;
+  let suffix = 0;
+  while (suffix < shorter - prefix && applied[applied.length - 1 - suffix] === current[current.length - 1 - suffix]) suffix++;
+
+  let result = current;
+  for (let i = 0; i < applied.length; i++) {
+    if (original[i] === applied[i]) continue;
+    let at = -1;
+    if (i < prefix) at = i;
+    else if (i >= applied.length - suffix) at = i - applied.length + current.length;
+    if (at !== -1) result = result.slice(0, at) + original[i] + result.slice(at + 1);
+  }
+  return result;
+}
+
+/**
  * The text the designer owns: the stored original, unless the layer was edited
- * after the plugin last wrote to it. Then the edited text wins.
+ * after the plugin last wrote to it. Then the edited text wins, minus the
+ * plugin's own swaps outside the edit.
  */
 function sourceText(node: TextNodeLike): string {
   const original = node.getPluginData(ORIGINAL_KEY);
-  return original && isUnedited(node) ? original : node.characters;
+  if (!original) return node.characters;
+  if (isUnedited(node)) return original;
+  const applied = node.getPluginData(APPLIED_KEY);
+  return applied ? withoutPluginSwaps(original, applied, node.characters) : node.characters;
+}
+
+/** True when the layer shows an unedited Pretty result: Pretty never adds line breaks, Balance always does. */
+function showsPretty(node: TextNodeLike): boolean {
+  if (!isUnedited(node)) return false;
+  const original = node.getPluginData(ORIGINAL_KEY);
+  const applied = node.getPluginData(APPLIED_KEY);
+  return applied.split("\n").length === original.split("\n").length;
 }
 
 function clearWrapData(node: TextNodeLike): void {
@@ -143,8 +182,14 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
         result.skippedEdited++;
         continue;
       }
+      const keepsPretty = mode === "balance" && showsPretty(node);
       try {
         const target = mode === "pretty" ? applyPretty(source) : balance(node, source, deps);
+        if (keepsPretty && target === source) {
+          // Nothing to balance: keep the earlier Pretty result rather than strip it
+          restore(node, before);
+          continue;
+        }
         // Store both recovery entries before committing the final text.
         if (target === source) {
           clearWrapData(node);
@@ -176,8 +221,11 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
       // Never wrapped by this plugin — leave the designer's text (and any NBSPs they typed) alone
       if (!original) continue;
 
-      // Edited since the plugin wrote to it — keep the edit, forget the old original
-      if (!isUnedited(node)) {
+      // The original, or for an edited layer the edit minus the plugin's own swaps around it
+      const target = sourceText(node);
+
+      // Edited, with none of the plugin's swaps left outside the edit — keep it as typed
+      if (target === node.characters) {
         clearWrapData(node);
         result.skippedEdited++;
         continue;
@@ -195,7 +243,7 @@ export async function resetNodes(nodes: TextNodeLike[], deps: Pick<WrapDeps, "lo
       }
       try {
         clearWrapData(node);
-        setText(node, original);
+        setText(node, target);
       } catch (e) {
         restore(node, before);
         throw e;

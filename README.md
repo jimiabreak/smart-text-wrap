@@ -28,7 +28,7 @@ Select any text layer, frame, component or instance, then pick an action. Smart 
 |--------|----------|-------------|
 | **Balance** | Headlines, titles | Breaks text that wraps into lines of roughly equal length |
 | **Pretty** | Body text, paragraphs | Keeps the last words of each paragraph together so no word is left alone |
-| **Reset text** | Anything the plugin changed | Puts back the text exactly as it was before the plugin touched it |
+| **Reset text** | Anything the plugin changed | Removes the plugin's non-breaking spaces and line breaks, and keeps any edits you made since |
 
 ## Features
 
@@ -50,6 +50,7 @@ Select any text layer, frame, component or instance, then pick an action. Smart 
 - Balance works on single-paragraph text of up to 6 lines, like browsers do for `text-wrap: balance`.
 - Auto-width text layers never wrap, so both actions skip them.
 - Text set in a font that isn't installed is skipped. Install or replace the font, then run the action again.
+- Balance breaks lines with a regular line break. If your text style adds paragraph spacing, that would make the text taller, so Balance leaves it alone.
 
 ## Quick Start
 
@@ -81,7 +82,7 @@ BEFORE (unbalanced)           AFTER (balanced)
 The plugin uses two strategies that mirror CSS `text-wrap` behavior:
 
 - **Pretty** swaps the space before the last word of each paragraph for a non-breaking space (`\u00A0`), so the last two words always wrap together. When those two words are long, it joins the last three.
-- **Balance** measures how many lines the text wraps to, then swaps spaces for line breaks so every line is about the same length. If balancing would add a line, the text is left as it was.
+- **Balance** measures how many lines the text wraps to, then swaps spaces for line breaks so every line is about the same length. If balancing would make the text box taller, the text is left as it was.
 
 Every change swaps one character for another in place, so styles applied to parts of the text survive. No containers are resized. No components are detached. The original text is stored on the layer so **Reset text** can put it back.
 

@@ -312,6 +312,35 @@ describe("wrapNodes — Balance", () => {
     expect(node.getPluginData("appliedText")).toBe("The quick brown\nfox jumps");
   });
 
+  it("keeps a Pretty result when there is nothing to balance", async () => {
+    const node = makeNode("First paragraph is here\nSecond paragraph is here");
+    await wrapNodes([node], "pretty", depsAt(40));
+    const pretty = node.characters;
+    const result = await wrapNodes([node], "balance", depsAt(40));
+    expect(node.characters).toBe(pretty);
+    expect(result.changed).toBe(0);
+    expect(node.getPluginData("appliedText")).toBe(pretty);
+  });
+
+  it("keeps a Pretty result on text longer than six lines", async () => {
+    const node = makeNode("one two three four five six seven eight nine ten eleven twelve");
+    await wrapNodes([node], "pretty", depsAt(6));
+    const pretty = node.characters;
+    const result = await wrapNodes([node], "balance", depsAt(6));
+    expect(node.characters).toBe(pretty);
+    expect(result.changed).toBe(0);
+  });
+
+  it("rebalances an edited heading instead of keeping the old break", async () => {
+    const node = makeNode("Welcome to our product");
+    await wrapNodes([node], "balance", depsAt(15));
+    expect(node.characters).toBe("Welcome to\nour product");
+    node.characters = "A warm welcome to\nour product";
+    await wrapNodes([node], "balance", depsAt(15));
+    expect(node.characters).toBe("A warm welcome\nto our product");
+    expect(node.getPluginData("originalText")).toBe("A warm welcome to our product");
+  });
+
   it("leaves multi-paragraph text alone", async () => {
     const node = makeNode("First paragraph is here\nSecond paragraph is here");
     await wrapNodes([node], "balance", depsAt(10));
@@ -338,6 +367,16 @@ describe("resetNodes", () => {
     expect(node.characters).toBe("Welcome to our new product");
     expect(result.skippedEdited).toBe(1);
     expect(result.changed).toBe(0);
+  });
+
+  it("removes the plugin's own break around an edit and keeps the edit", async () => {
+    const node = makeNode("Welcome to our product");
+    await wrapNodes([node], "balance", depsAt(15));
+    node.characters = "Welcome to\nour products";
+    const result = await resetNodes([node], deps);
+    expect(node.characters).toBe("Welcome to our products");
+    expect(result.changed).toBe(1);
+    expect(node.getPluginData("originalText")).toBe("");
   });
 
   it("leaves layers the plugin never touched alone, including their NBSPs", async () => {

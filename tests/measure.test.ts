@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { countLines, textHeight } from "../src/measure";
 
 const LINE = 20;
+/** With vertical trim ("CAP_HEIGHT"), the first line is only cap-height tall. */
+const CAP = 10;
 
 /** Greedy word wrap at `width` characters per line. Line breaks always start a new line. */
 function wrapCount(text: string, width: number): number {
@@ -27,19 +29,21 @@ function wrapCount(text: string, width: number): number {
  * "HEIGHT" wraps at the layer's width, "WIDTH_AND_HEIGHT" never wraps, so only
  * line breaks start new lines. Each line is LINE px tall.
  */
-function makeLayer(text: string, width: number, textAutoResize = "HEIGHT") {
-  const probes: { textAutoResize: string; textTruncation: string; removed: boolean }[] = [];
+function makeLayer(text: string, width: number, textAutoResize = "HEIGHT", leadingTrim = "NONE") {
+  const probes: { textAutoResize: string; textTruncation: string; leadingTrim: string; removed: boolean }[] = [];
   const layer = {
     characters: text,
     textAutoResize,
+    leadingTrim,
     clone() {
       const probe = {
         textAutoResize,
         textTruncation: "ENDING",
+        leadingTrim,
         removed: false,
         get height() {
           const lines = probe.textAutoResize === "WIDTH_AND_HEIGHT" ? text.split("\n").length : wrapCount(text, width);
-          return lines * LINE;
+          return probe.leadingTrim === "CAP_HEIGHT" ? (lines - 1) * LINE + CAP : lines * LINE;
         },
         remove() {
           probe.removed = true;
@@ -55,6 +59,11 @@ function makeLayer(text: string, width: number, textAutoResize = "HEIGHT") {
 describe("countLines", () => {
   it("counts the lines a paragraph wraps to", () => {
     const { layer } = makeLayer("The quick brown fox jumps over the lazy dog", 30);
+    expect(countLines(layer)).toBe(2);
+  });
+
+  it("counts correctly when the text uses vertical trim", () => {
+    const { layer } = makeLayer("The quick brown fox jumps over the lazy dog", 30, "HEIGHT", "CAP_HEIGHT");
     expect(countLines(layer)).toBe(2);
   });
 

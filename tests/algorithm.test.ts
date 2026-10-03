@@ -36,6 +36,10 @@ describe("applyPretty", () => {
     expect(applyPretty("Hello world")).toBe("Hello\u00A0world");
   });
 
+  it("still joins the last words when the line ends in a non-breaking space", () => {
+    expect(applyPretty("Hello world\u00A0")).toBe("Hello\u00A0world\u00A0");
+  });
+
   it("keeps leading and trailing whitespace", () => {
     expect(applyPretty("  indented line here  ")).toBe("  indented line\u00A0here  ");
   });

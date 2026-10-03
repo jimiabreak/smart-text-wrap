@@ -1,7 +1,7 @@
 {
   "name": "smart-text-wrap",
   "version": "1.0.0",
-  "description": "Automatically prevents orphans and balances text in Figma — like CSS text-wrap: pretty and balance",
+  "description": "Prevents orphans and balances text in Figma — like CSS text-wrap: pretty and balance",
   "scripts": {
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
