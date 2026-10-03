@@ -73,6 +73,9 @@ figma.ui.onmessage = async (msg: { type: string }) => {
     figma.ui.postMessage({ type: "error", message: "Something went wrong" });
   }
 
+  // One undo step per action, so ⌘Z reverts only the latest click
+  figma.commitUndo();
+
   // Always re-enable UI
   figma.ui.postMessage({ type: "done" });
 };
