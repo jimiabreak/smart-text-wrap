@@ -9,6 +9,8 @@ export interface TextNodeLike {
   textAutoResize: string;
   getPluginData(key: string): string;
   setPluginData(key: string, value: string): void;
+  insertCharacters(start: number, characters: string, useStyle?: "BEFORE" | "AFTER"): void;
+  deleteCharacters(start: number, end: number): void;
 }
 
 export interface WrapDeps {
@@ -48,6 +50,26 @@ function clearWrapData(node: TextNodeLike): void {
   node.setPluginData(APPLIED_KEY, "");
 }
 
+/**
+ * Change the node's text to `target` one character at a time, so bold, links
+ * and other range styles survive. Assigning `characters` would reset them.
+ * The plugin only ever swaps a regular space for an NBSP or a line break (and
+ * back), so `target` always has the same length as the current text.
+ */
+export function setText(node: TextNodeLike, target: string): void {
+  const current = node.characters;
+  if (current.length !== target.length) {
+    throw new Error(`Refusing to rewrite "${node.name}": length would change from ${current.length} to ${target.length}`);
+  }
+  for (let i = 0; i < target.length; i++) {
+    if (current[i] !== target[i]) {
+      // Insert after the old character so the new one copies its style, then drop the old one
+      node.insertCharacters(i + 1, target[i], "BEFORE");
+      node.deleteCharacters(i, i + 1);
+    }
+  }
+}
+
 export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: WrapDeps): Promise<ProcessResult> {
   const result = emptyResult();
 
@@ -60,7 +82,7 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
 
       const before = node.characters;
       const target = mode === "pretty" ? applyPretty(source) : applyBalance(source);
-      if (before !== target) node.characters = target;
+      setText(node, target);
       if (node.characters !== before) result.changed++;
 
       if (target === source) {
@@ -95,7 +117,7 @@ export async function resetNodes(nodes: TextNodeLike[], deps: WrapDeps): Promise
       }
 
       await deps.loadFonts(node);
-      node.characters = original;
+      setText(node, original);
       clearWrapData(node);
       result.changed++;
     } catch (e) {

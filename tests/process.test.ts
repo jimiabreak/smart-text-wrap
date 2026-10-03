@@ -1,20 +1,49 @@
 import { describe, it, expect } from "vitest";
-import { wrapNodes, resetNodes, type WrapDeps } from "../src/process";
+import { wrapNodes, resetNodes, setText, type WrapDeps } from "../src/process";
 
 const NBSP = "\u00A0";
 
-/** A stand-in for Figma's TextNode with just the fields src/process.ts uses. */
-function makeNode(text: string, opts: { textAutoResize?: string } = {}) {
+/**
+ * A stand-in for Figma's TextNode. It tracks one style name per character the
+ * way Figma tracks range styles: assigning `characters` resets every
+ * character to "regular", while insertCharacters/deleteCharacters keep them.
+ */
+function makeNode(text: string, opts: { textAutoResize?: string; styles?: string[] } = {}) {
   const data: Record<string, string> = {};
+  let chars = text;
+  let styles = opts.styles ?? text.split("").map(() => "regular");
   return {
     name: "Text",
-    characters: text,
     textAutoResize: opts.textAutoResize ?? "HEIGHT",
+    get characters() {
+      return chars;
+    },
+    set characters(value: string) {
+      chars = value;
+      styles = value.split("").map(() => "regular");
+    },
+    get styles() {
+      return styles;
+    },
     getPluginData: (key: string) => data[key] ?? "",
     setPluginData: (key: string, value: string) => {
       data[key] = value;
     },
+    insertCharacters(start: number, inserted: string, useStyle: "BEFORE" | "AFTER" = "BEFORE") {
+      const copied = useStyle === "BEFORE" ? (styles[start - 1] ?? styles[start]) : (styles[start] ?? styles[start - 1]);
+      chars = chars.slice(0, start) + inserted + chars.slice(start);
+      styles = [...styles.slice(0, start), ...inserted.split("").map(() => copied), ...styles.slice(start)];
+    },
+    deleteCharacters(start: number, end: number) {
+      chars = chars.slice(0, start) + chars.slice(end);
+      styles = [...styles.slice(0, start), ...styles.slice(end)];
+    },
   };
+}
+
+/** "Hello beautiful world" with "beautiful" in bold. */
+function boldStyles(): string[] {
+  return "Hello beautiful world".split("").map((_, i) => (i >= 6 && i <= 14 ? "bold" : "regular"));
 }
 
 const deps: WrapDeps = { loadFonts: async () => {} };
@@ -82,6 +111,26 @@ describe("wrapNodes", () => {
     expect(node.characters).toBe(`A completely rewritten paragraph by the${NBSP}designer`);
     expect(node.getPluginData("originalText")).toBe("A completely rewritten paragraph by the designer");
   });
+
+  it("keeps bold and other range styles when wrapping", async () => {
+    const node = makeNode("Hello beautiful world", { styles: boldStyles() });
+    await wrapNodes([node], "pretty", deps);
+    expect(node.characters).toBe(`Hello beautiful${NBSP}world`);
+    expect(node.styles).toEqual(boldStyles());
+  });
+
+  it("keeps range styles when switching from Balance to Pretty", async () => {
+    const node = makeNode("Hello beautiful world", { styles: boldStyles() });
+    await wrapNodes([node], "balance", deps);
+    await wrapNodes([node], "pretty", deps);
+    expect(node.styles).toEqual(boldStyles());
+  });
+
+  it("handles emoji next to the replaced space", async () => {
+    const node = makeNode("Ship it today 🚀 friends");
+    await wrapNodes([node], "pretty", deps);
+    expect(node.characters).toBe(`Ship it today 🚀${NBSP}friends`);
+  });
 });
 
 describe("resetNodes", () => {
@@ -110,5 +159,21 @@ describe("resetNodes", () => {
     const result = await resetNodes([node], deps);
     expect(node.characters).toBe(`Set in 16${NBSP}px type`);
     expect(result.changed).toBe(0);
+  });
+
+  it("keeps range styles when resetting", async () => {
+    const node = makeNode("Hello beautiful world", { styles: boldStyles() });
+    await wrapNodes([node], "pretty", deps);
+    await resetNodes([node], deps);
+    expect(node.characters).toBe("Hello beautiful world");
+    expect(node.styles).toEqual(boldStyles());
+  });
+});
+
+describe("setText", () => {
+  it("refuses a change in length instead of resetting styles", () => {
+    const node = makeNode("Hello world");
+    expect(() => setText(node, "Hello")).toThrow(/length would change/);
+    expect(node.characters).toBe("Hello world");
   });
 });
