@@ -1,4 +1,4 @@
-import { WINDOW_SIZE, type Action, type PluginRequest, type ToastVariant, type UiMessage } from "./messages";
+import { WINDOW_SIZE, clampWindowHeight, type Action, type PluginRequest, type ToastVariant, type UiMessage } from "./messages";
 
 const balanceCard = document.getElementById("balanceCard") as HTMLButtonElement;
 const prettyCard = document.getElementById("prettyCard") as HTMLButtonElement;
@@ -29,9 +29,8 @@ function fitWindow(): void {
   // Document coordinates, so a scrolled panel isn't under-measured
   const panelBottom = (document.querySelector("main") as HTMLElement).getBoundingClientRect().bottom + window.scrollY;
   const shown = toastEl.classList.contains("toast-visible");
-  const needed = shown ? Math.ceil(panelBottom + toastEl.offsetHeight + 16) : WINDOW_SIZE.height;
-  // The plugin clamps to the same range, so the UI's idea of the size stays true
-  const height = Math.min(Math.max(WINDOW_SIZE.height, needed), WINDOW_SIZE.maxHeight);
+  // The plugin applies the same clamp, so the UI's idea of the size stays true
+  const height = clampWindowHeight(shown ? panelBottom + toastEl.offsetHeight + 16 : WINDOW_SIZE.height);
   if (height === windowHeight) return;
   windowHeight = height;
   send({ type: "resize", height });

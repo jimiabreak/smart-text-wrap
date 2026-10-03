@@ -6,6 +6,11 @@ export type ToastVariant = "success" | "info" | "error";
 /** Plugin window size, shared by the plugin and the panel. The panel asks for more height only while a long toast would cover it. */
 export const WINDOW_SIZE = { width: 280, height: 460, maxHeight: 800 };
 
+/** The window height actually used for a requested height; the plugin and the panel both use it, so they agree. */
+export function clampWindowHeight(height: number): number {
+  return Math.min(Math.max(Math.ceil(height), WINDOW_SIZE.height), WINDOW_SIZE.maxHeight);
+}
+
 /** A message the UI sends to the plugin. */
 export type PluginRequest = { type: Action } | { type: "resize"; height: number };
 
@@ -42,6 +47,7 @@ export function describeResult(action: Action, result: ProcessResult): { type: T
   const notes: string[] = [];
   if (result.skippedEdited > 0) notes.push(`Kept ${layers(result.skippedEdited)} you edited.`);
   if (result.interrupted > 0) notes.push(`Skipped ${layers(result.interrupted)} that changed during the action. Run it again.`);
+  if (result.skippedFormatting > 0) notes.push(`Skipped ${layers(result.skippedFormatting)} with bullets, numbers or an indent.`);
 
   const parts = result.changed > 0 ? [`${DONE[action](result.changed)}.`, ...problems, ...notes] : [...problems, ...notes];
 

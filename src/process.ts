@@ -32,13 +32,15 @@ export interface ProcessResult {
   skippedMissingFont: number;
   /** Layers that changed while the action ran, so were left alone; running the action again picks them up. */
   interrupted: number;
+  /** Layers Balance left alone because each new paragraph would repeat a bullet, number or indent. */
+  skippedFormatting: number;
 }
 
 const ORIGINAL_KEY = "originalText";
 const APPLIED_KEY = "appliedText";
 
 function emptyResult(): ProcessResult {
-  return { changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 };
+  return { changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0, skippedFormatting: 0 };
 }
 
 /** True when the layer still shows exactly what the plugin last wrote to it. */
@@ -135,7 +137,7 @@ function restore(node: TextNodeLike, before: ReturnType<typeof snapshot>): void 
  * layer doesn't get taller. Measures copies, so the layer itself is never touched.
  */
 function balance(node: TextNodeLike, source: string, deps: WrapDeps): string {
-  if (hasLineBreak(source) || deps.hasParagraphFormatting(node)) return source;
+  if (hasLineBreak(source)) return source;
   const { lines, height } = deps.measureLines(node, source);
   const target = balanceToLines(source, lines);
   if (target === source) return source;
@@ -179,6 +181,11 @@ export async function wrapNodes(nodes: TextNodeLike[], mode: WrapMode, deps: Wra
       // A designer or another action may edit the layer while fonts load.
       if (!stillMatches(node, before)) {
         result.interrupted++;
+        continue;
+      }
+      // Balance's "\n" would repeat a bullet, number or indent on every line: leave such text as it is
+      if (mode === "balance" && !hasLineBreak(source) && deps.hasParagraphFormatting(node)) {
+        result.skippedFormatting++;
         continue;
       }
       const keepsPretty = mode === "balance" && lastWriteWasPretty(node);

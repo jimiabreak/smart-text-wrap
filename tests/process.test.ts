@@ -124,7 +124,7 @@ describe("edits during font loading", () => {
       release();
       const result = await action;
       expect(node.characters).toBe("Hello beautiful earth");
-      expect(result).toMatchObject({ changed: 0, failed: 0, skippedEdited: 0, interrupted: 1 });
+      expect(result).toMatchObject({ changed: 0, failed: 0, skippedEdited: 0, interrupted: 1, skippedFormatting: 0 });
       expect(node.getPluginData("originalText")).toBe("");
     });
   }
@@ -137,7 +137,7 @@ describe("edits during font loading", () => {
     const action = resetNodes([node], { loadFonts: () => pending });
     node.characters = "Hello beautiful earth";
     release();
-    expect(await action).toMatchObject({ changed: 0, failed: 0, skippedEdited: 0, interrupted: 1 });
+    expect(await action).toMatchObject({ changed: 0, failed: 0, skippedEdited: 0, interrupted: 1, skippedFormatting: 0 });
     expect(node.characters).toBe("Hello beautiful earth");
     await resetNodes([node], deps);
     expect(node.characters).toBe("Hello beautiful earth");
@@ -260,7 +260,7 @@ describe("wrapNodes", () => {
     const node = makeNode("Hello beautiful world");
     const changing: WrapDeps = { ...deps, loadFonts: async () => Promise.reject(new FontsChangedError()) };
     const result = await wrapNodes([node], "pretty", changing);
-    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1 });
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1, skippedFormatting: 0 });
     expect(node.characters).toBe("Hello beautiful world");
   });
 
@@ -275,7 +275,7 @@ describe("wrapNodes", () => {
       },
     };
     const result = await wrapNodes([node], "pretty", deleting);
-    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 });
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0, skippedFormatting: 0 });
   });
 
   it("quietly skips a layer deleted before its turn", async () => {
@@ -288,7 +288,7 @@ describe("wrapNodes", () => {
       },
     };
     const result = await wrapNodes([first, second], "pretty", deleting);
-    expect(result).toEqual({ changed: 1, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 });
+    expect(result).toEqual({ changed: 1, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0, skippedFormatting: 0 });
   });
 
   it("skips layers with missing fonts without touching them", async () => {
@@ -442,11 +442,20 @@ describe("wrapNodes — Balance", () => {
     expect(result.changed).toBe(0);
   });
 
+  it("keeps a Pretty result on a list item that Balance skips", async () => {
+    const node = makeNode("The quick brown fox jumps");
+    await wrapNodes([node], "pretty", depsAt(20));
+    const pretty = node.characters;
+    await wrapNodes([node], "balance", { ...depsAt(20), hasParagraphFormatting: () => true });
+    expect(node.characters).toBe(pretty);
+  });
+
   it("leaves list items and indented paragraphs alone", async () => {
     const node = makeNode("The quick brown fox jumps");
     const result = await wrapNodes([node], "balance", { ...depsAt(20), hasParagraphFormatting: () => true });
     expect(node.characters).toBe("The quick brown fox jumps");
     expect(result.changed).toBe(0);
+    expect(result.skippedFormatting).toBe(1);
   });
 
   it("leaves multi-paragraph text alone", async () => {
@@ -499,7 +508,7 @@ describe("resetNodes", () => {
     await wrapNodes([node], "pretty", deps);
     const changing = { loadFonts: async () => Promise.reject(new FontsChangedError()) };
     const result = await resetNodes([node], changing);
-    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1 });
+    expect(result).toEqual({ changed: 0, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 1, skippedFormatting: 0 });
     expect(node.characters).toBe(`Hello beautiful${NBSP}world`);
   });
 
@@ -513,7 +522,7 @@ describe("resetNodes", () => {
       },
     };
     const result = await resetNodes([first, second], deleting);
-    expect(result).toEqual({ changed: 1, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0 });
+    expect(result).toEqual({ changed: 1, failed: 0, skippedEdited: 0, skippedMissingFont: 0, interrupted: 0, skippedFormatting: 0 });
   });
 
   it("skips resetting layers with missing fonts", async () => {

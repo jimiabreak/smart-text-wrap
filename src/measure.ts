@@ -49,6 +49,8 @@ export function measureHeight(node: TextNode, text: string): number {
  */
 export function hasParagraphFormatting(node: TextNode): boolean {
   if (node.paragraphIndent > 0) return true;
+  // Figma's range getters throw on an empty range
+  if (node.characters.length === 0) return false;
   const list = node.getRangeListOptions(0, node.characters.length);
   return list === figma.mixed || list.type !== "NONE";
 }

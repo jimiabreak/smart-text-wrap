@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { describeResult, isAction } from "../src/messages";
+import { clampWindowHeight, describeResult, isAction } from "../src/messages";
 
-const result = (changes: Partial<{ changed: number; failed: number; skippedEdited: number; skippedMissingFont: number; interrupted: number }>) => ({
+const result = (changes: Partial<{ changed: number; failed: number; skippedEdited: number; skippedMissingFont: number; interrupted: number; skippedFormatting: number }>) => ({
   changed: 0,
   failed: 0,
   skippedEdited: 0,
   skippedMissingFont: 0,
   interrupted: 0,
+  skippedFormatting: 0,
   ...changes,
 });
 
@@ -65,6 +66,23 @@ describe("describeResult — layers that changed during an action", () => {
       type: "info",
       message: "Skipped 2 text layers that changed during the action. Run it again.",
     });
+  });
+});
+
+describe("describeResult — formatted text", () => {
+  it("says why Balance left bulleted or indented text alone", () => {
+    expect(describeResult("balance", result({ skippedFormatting: 2 }))).toEqual({
+      type: "info",
+      message: "Skipped 2 text layers with bullets, numbers or an indent.",
+    });
+  });
+});
+
+describe("clampWindowHeight", () => {
+  it("keeps the window between its normal and maximum height, in whole pixels", () => {
+    expect(clampWindowHeight(300)).toBe(460);
+    expect(clampWindowHeight(512.2)).toBe(513);
+    expect(clampWindowHeight(5000)).toBe(800);
   });
 });
 

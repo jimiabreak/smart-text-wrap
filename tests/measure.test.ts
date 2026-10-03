@@ -147,11 +147,27 @@ describe("probes", () => {
 });
 
 describe("hasParagraphFormatting", () => {
-  const layer = (paragraphIndent: number, list: unknown) =>
-    ({ characters: "Hello world", paragraphIndent, getRangeListOptions: () => list }) as any;
+  const ranges: number[][] = [];
+  const layer = (paragraphIndent: number, list: unknown, characters = "Hello world") =>
+    ({
+      characters,
+      paragraphIndent,
+      getRangeListOptions: (start: number, end: number) => {
+        ranges.push([start, end]);
+        return list;
+      },
+    }) as any;
 
-  it("is false for plain paragraphs", () => {
+  it("is false for plain paragraphs, checking the whole text", () => {
+    ranges.length = 0;
     expect(hasParagraphFormatting(layer(0, { type: "NONE" }))).toBe(false);
+    expect(ranges).toEqual([[0, "Hello world".length]]);
+  });
+
+  it("is false for empty text without asking for an empty range", () => {
+    ranges.length = 0;
+    expect(hasParagraphFormatting(layer(0, { type: "UNORDERED" }, ""))).toBe(false);
+    expect(ranges).toEqual([]);
   });
 
   it("is true for bulleted, numbered or mixed lists", () => {

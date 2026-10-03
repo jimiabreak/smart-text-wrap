@@ -9,6 +9,7 @@ import {
   NO_TEXT_LAYERS,
   UNEXPECTED_ERROR,
   WINDOW_SIZE,
+  clampWindowHeight,
   type Action,
   type PluginRequest,
   type UiMessage,
@@ -52,7 +53,7 @@ figma.ui.onmessage = async (msg: PluginRequest) => {
 
   if (msg.type === "resize") {
     if (Number.isFinite(msg.height)) {
-      figma.ui.resize(WINDOW_SIZE.width, Math.min(Math.max(Math.round(msg.height), WINDOW_SIZE.height), WINDOW_SIZE.maxHeight));
+      figma.ui.resize(WINDOW_SIZE.width, clampWindowHeight(msg.height));
     }
     return;
   }
@@ -65,11 +66,14 @@ figma.ui.onmessage = async (msg: PluginRequest) => {
   } catch (e) {
     console.error("Plugin error:", e);
     post({ type: "error", message: UNEXPECTED_ERROR });
+  } finally {
+    try {
+      // One undo step per action, so ⌘Z reverts only the latest click
+      figma.commitUndo();
+    } catch (e) {
+      console.error("Could not commit the undo step:", e);
+    }
+    // Always re-enable the UI
+    post({ type: "done" });
   }
-
-  // One undo step per action, so ⌘Z reverts only the latest click
-  figma.commitUndo();
-
-  // Always re-enable UI
-  post({ type: "done" });
 };
