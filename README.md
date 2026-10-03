@@ -2,7 +2,7 @@
 
 # Smart Text Wrap
 
-**Automatically prevent orphans and balance text in Figma.**
+**Prevent orphans and balance text in Figma.**
 Like CSS `text-wrap: pretty` and `text-wrap: balance` — but for your design tools.
 
 [![Install on Figma](https://img.shields.io/badge/Install_on-Figma-black?style=for-the-badge&logo=figma&logoColor=white)](https://www.figma.com/community)
@@ -22,47 +22,51 @@ You can't resize the component. You can't break the instance. You just have to..
 
 ## How It Works
 
-Smart Text Wrap runs silently in the background. Edit text, click away, and orphans disappear.
+Select any text layer, frame, component or instance, then pick an action. Smart Text Wrap finds every text layer inside your selection.
 
-| Mode | Best for | What it does |
-|------|----------|-------------|
-| **Pretty** | Body text, paragraphs | Joins the last two words so they always wrap together |
-| **Balance** | Headlines, titles | Splits text into roughly equal line lengths |
-
-The plugin **auto-detects** the right mode — no setup required:
-
-- Text styles named "Heading", "Title", "Display", "H1"–"H6" → **Balance**
-- All other text styles → **Pretty**
-- No text style? Short text → Balance, long text → Pretty
+| Action | Best for | What it does |
+|--------|----------|-------------|
+| **Balance** | Headlines, titles | Breaks text that wraps into lines of roughly equal length |
+| **Pretty** | Body text, paragraphs | Keeps the last words of each paragraph together so no word is left alone |
+| **Reset text** | Anything the plugin changed | Puts back the text exactly as it was before the plugin touched it |
 
 ## Features
 
-**Zero config** — just works, no menus or settings to fuss with.
+**Works on whole frames** — select a card, a screen or a component and every text layer inside is handled.
 
-**Auto-fix on deselect** — select text, edit it, click away. Done.
+**Keeps your formatting** — bold words, links and colored text keep their styles.
 
-**Fix This Page** — one button to clean up every text layer on the current page.
+**Keeps your edits** — rewrite text after wrapping it and the plugin works from your new copy. Reset never throws your edits away.
 
-**Component-safe** — works inside component instances without detaching or breaking anything. Only modifies the text content itself.
+**Component-safe** — works inside component instances without detaching them. Only the text content changes.
 
-**Design system friendly** — built specifically for the workflow where you can't adjust component widths to fix orphans.
+**One undo per click** — press ⌘Z (Ctrl+Z) to undo the last action.
+
+**Follows your Figma theme** — light or dark, matching Figma's own setting.
+
+## Good to know
+
+- Balance only changes text that actually wraps. A heading that fits on one line stays on one line.
+- Balance works on single-paragraph text of up to 6 lines, like browsers do for `text-wrap: balance`.
+- Auto-width text layers never wrap, so both actions skip them.
+- Text set in a font that isn't installed is skipped. Install or replace the font, then run the action again.
 
 ## Quick Start
 
 1. Install **Smart Text Wrap** from the [Figma Community](https://www.figma.com/community)
 2. Run it from **Plugins > Smart Text Wrap**
-3. Design as usual — orphans are fixed automatically when you click away
-4. Hit **Fix This Page** to batch-fix an entire screen
+3. Select the text, frame or component you want to fix
+4. Click **Balance** for headlines or **Pretty** for body text
 
 ## Before & After
 
 ```
 BEFORE (ugly orphan)          AFTER (pretty)
 ┌──────────────────┐          ┌──────────────────┐
-│ The quick brown  │          │ The quick brown   │
-│ fox jumps over   │          │ fox jumps over    │
-│ the              │  ──────> │ the lazy dog      │
-│ lazy dog         │          │                   │
+│ The quick brown  │          │ The quick brown  │
+│ fox jumps over   │          │ fox jumps over   │
+│ the lazy         │  ──────> │ the              │
+│ dog              │          │ lazy dog         │
 └──────────────────┘          └──────────────────┘
 
 BEFORE (unbalanced)           AFTER (balanced)
@@ -76,10 +80,10 @@ BEFORE (unbalanced)           AFTER (balanced)
 
 The plugin uses two strategies that mirror CSS `text-wrap` behavior:
 
-- **Pretty mode** inserts a non-breaking space (`\u00A0`) between the last two words, preventing them from being split across lines
-- **Balance mode** inserts a line break at the text midpoint to equalize line lengths
+- **Pretty** swaps the space before the last word of each paragraph for a non-breaking space (`\u00A0`), so the last two words always wrap together. When those two words are long, it joins the last three.
+- **Balance** measures how many lines the text wraps to, then swaps spaces for line breaks so every line is about the same length. If balancing would add a line, the text is left as it was.
 
-No containers are resized. No components are detached. Just the text string — the lightest possible touch.
+Every change swaps one character for another in place, so styles applied to parts of the text survive. No containers are resized. No components are detached. The original text is stored on the layer so **Reset text** can put it back.
 
 ## Development
 
@@ -93,8 +97,14 @@ npm run build
 # Watch for changes during development
 npm run watch
 
+# Type-check
+npm run typecheck
+
 # Run tests
 npm test
+
+# Check the UI's color contrast in both themes
+npm run check:contrast
 ```
 
 To load in Figma:
